@@ -12,8 +12,10 @@ interface TelegramContextType {
   isLoggedIn: boolean;
   login: (phone: string) => Promise<void>;
   sendCode: (code: string) => Promise<void>;
+  sendPassword: (password: string) => Promise<void>;
   logout: () => void;
   fetchMessages: () => Promise<any[]>;
+  isTwoFactorRequired: boolean;
 }
 
 const TelegramContext = createContext<TelegramContextType | null>(null);
@@ -31,6 +33,7 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [phone, setPhone] = useState('');
   const [phoneCodeHash, setPhoneCodeHash] = useState('');
+  const [isTwoFactorRequired, setIsTwoFactorRequired] = useState(false);
 
   useEffect(() => {
     const initializeClient = async () => {
@@ -103,8 +106,40 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
       
       localStorage.setItem('session', client.session.save() as string);
       setIsLoggedIn(true);
+    } catch (error: any) {
+      if (error.error_message === 'SESSION_PASSWORD_NEEDED') {
+        setIsTwoFactorRequired(true);
+      } else {
+        console.error('Code verification error:', error);
+        throw error;
+      }
+    }
+  };
+
+  const sendPassword = async (password: string) => {
+    if (!client) return;
+    
+    try {
+      // Ensure client is connected before sending password
+      if (!client.connected) {
+        await client.connect();
+      }
+      
+      await client.invoke(
+        new Api.auth.CheckPassword({
+          password: new Api.InputCheckPasswordSRP({
+            srpId: BigInt(0),
+            A: Buffer.from(''),
+            M1: Buffer.from('')
+          })
+        })
+      );
+      
+      localStorage.setItem('session', client.session.save() as string);
+      setIsLoggedIn(true);
+      setIsTwoFactorRequired(false);
     } catch (error) {
-      console.error('Code verification error:', error);
+      console.error('Password verification error:', error);
       throw error;
     }
   };
@@ -115,6 +150,7 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     }
     localStorage.removeItem('session');
     setIsLoggedIn(false);
+    setIsTwoFactorRequired(false);
     setPhone('');
     setPhoneCodeHash('');
   };
@@ -148,8 +184,10 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     isLoggedIn,
     login,
     sendCode,
+    sendPassword,
     logout,
     fetchMessages,
+    isTwoFactorRequired
   };
 
   return (
