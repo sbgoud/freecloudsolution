@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '@/context/TelegramContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,13 +20,27 @@ const countryCodes = [
 ];
 
 const Login = () => {
+  const navigate = useNavigate();
   const [countryCode, setCountryCode] = useState('+91');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { login, sendCode, sendPassword, isTwoFactorRequired } = useTelegram();
+  const { 
+    isLoggedIn, 
+    login, 
+    sendCode, 
+    sendPassword, 
+    isTwoFactorRequired 
+  } = useTelegram();
+
+  // Redirect to home if already logged in
+  useEffect(() => {
+    if (isLoggedIn) {
+      navigate('/home');
+    }
+  }, [isLoggedIn, navigate]);
 
   const handleSendCode = async () => {
     const fullPhone = `${countryCode}${phoneNumber}`;

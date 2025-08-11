@@ -1,13 +1,22 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '@/context/TelegramContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const Home = () => {
-  const { fetchMessages, logout } = useTelegram();
+  const navigate = useNavigate();
+  const { isLoggedIn, fetchMessages, logout } = useTelegram();
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Redirect to login if not logged in
+  useEffect(() => {
+    if (!isLoggedIn) {
+      navigate('/login');
+    }
+  }, [isLoggedIn, navigate]);
 
   const loadMessages = async () => {
     setIsLoading(true);
@@ -21,9 +30,16 @@ const Home = () => {
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   useEffect(() => {
-    loadMessages();
-  }, []);
+    if (isLoggedIn) {
+      loadMessages();
+    }
+  }, [isLoggedIn]);
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">
@@ -34,7 +50,7 @@ const Home = () => {
             <Button onClick={loadMessages} disabled={isLoading}>
               Refresh
             </Button>
-            <Button variant="destructive" onClick={logout}>
+            <Button variant="destructive" onClick={handleLogout}>
               Logout
             </Button>
           </div>
