@@ -1,0 +1,75 @@
+import { useState, useEffect } from 'react';
+import { useTelegram } from '@/context/TelegramContext';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+
+const Home = () => {
+  const { fetchMessages, logout } = useTelegram();
+  const [messages, setMessages] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadMessages = async () => {
+    setIsLoading(true);
+    try {
+      const msgs = await fetchMessages();
+      setMessages(msgs);
+    } catch (error) {
+      console.error('Failed to load messages', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMessages();
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Saved Messages</h1>
+          <div className="space-x-2">
+            <Button onClick={loadMessages} disabled={isLoading}>
+              Refresh
+            </Button>
+            <Button variant="destructive" onClick={logout}>
+              Logout
+            </Button>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-4">
+            {[...Array(5)].map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-4 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : messages.length > 0 ? (
+          <div className="space-y-4">
+            {messages.map((msg) => (
+              <Card key={msg.id}>
+                <CardHeader>
+                  <CardTitle>Message {msg.id}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p>{msg.message}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <p>No messages found.</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Home;
