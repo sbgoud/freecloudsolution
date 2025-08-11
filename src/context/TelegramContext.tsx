@@ -62,6 +62,11 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     setPhone(phoneNumber);
     
     try {
+      // Ensure client is connected before sending code
+      if (!client.connected) {
+        await client.connect();
+      }
+      
       const { phoneCodeHash: hash } = await client.sendCode({
         apiId: API_ID,
         apiHash: API_HASH,
@@ -77,6 +82,11 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     if (!client || !phone || !phoneCodeHash) return;
     
     try {
+      // Ensure client is connected before signing in
+      if (!client.connected) {
+        await client.connect();
+      }
+      
       await client.signIn({
         phoneNumber: phone,
         phoneCodeHash,
@@ -105,6 +115,11 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     if (!client) return [];
     
     try {
+      // Ensure client is connected before fetching messages
+      if (!client.connected) {
+        await client.connect();
+      }
+      
       const result = await client.invoke({
         _: 'messages.getSavedHistory',
         peer: 'self',
