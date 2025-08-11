@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
+import { Api } from 'telegram';
 
 // Hardcoded credentials (user will change manually later)
 const API_ID = 20134869;
@@ -67,11 +68,16 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         await client.connect();
       }
       
-      const { phoneCodeHash: hash } = await client.sendCode({
-        apiId: API_ID,
-        apiHash: API_HASH,
-      }, phoneNumber);
-      setPhoneCodeHash(hash);
+      const result = await client.invoke(
+        new Api.auth.SendCode({
+          phoneNumber,
+          apiId: API_ID,
+          apiHash: API_HASH,
+          settings: new Api.CodeSettings({})
+        })
+      );
+      
+      setPhoneCodeHash(result.phoneCodeHash);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -87,11 +93,13 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         await client.connect();
       }
       
-      await client.signIn({
-        phoneNumber: phone,
-        phoneCodeHash,
-        phoneCode: code,
-      });
+      await client.invoke(
+        new Api.auth.SignIn({
+          phoneNumber: phone,
+          phoneCodeHash,
+          phoneCode: code
+        })
+      );
       
       localStorage.setItem('session', client.session.save() as string);
       setIsLoggedIn(true);
@@ -120,15 +128,14 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         await client.connect();
       }
       
-      const result = await client.invoke({
-        _: 'messages.getSavedHistory',
-        peer: 'self',
-        limit: 5,
-        offsetId: 0,
-      });
+      const result = await client.invoke(
+        new Api.messages.GetSavedHistory({
+          peer: 'self',
+          limit: 5,
+          offsetId: 0
+        })
+      );
       
-      // Process the result to extract messages
-      // This is a simplified example; you'll need to adjust based on actual response
       return result.messages || [];
     } catch (error) {
       console.error('Error fetching messages:', error);
