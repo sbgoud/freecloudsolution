@@ -131,9 +131,23 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         new Api.account.GetPassword()
       );
       
-      // Dynamically import computeCheckPassword and use it
-      const { computeCheckPassword } = await import('telegram/Password');
-      const checkPassword = await computeCheckPassword(passwordConfig, password);
+      // Try a different approach - check if we can access the method differently
+      let checkPassword;
+      
+      // First try the direct method
+      try {
+        checkPassword = await (client as any).computeCheckPassword(passwordConfig, password);
+      } catch (e) {
+        // If that fails, try importing it
+        try {
+          const { computeCheckPassword } = await import('telegram/Password');
+          checkPassword = await computeCheckPassword(passwordConfig, password);
+        } catch (importError) {
+          console.error('Failed to import computeCheckPassword:', importError);
+          // If both fail, throw an error
+          throw new Error('Unable to compute password check - SRP implementation not available');
+        }
+      }
       
       // Use the computed parameters to check the password
       await client.invoke(
