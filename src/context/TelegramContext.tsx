@@ -251,12 +251,41 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the 50MB limit.`);
       }
 
-      // Convert File to Buffer for Telegram API
-      const buffer = Buffer.from(await file.arrayBuffer());
+      // Create a proper file reader for Telegram API
+      const readFileAsBuffer = (file: File): Promise<Buffer> => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          
+          reader.onload = (event) => {
+            try {
+              const arrayBuffer = event.target?.result as ArrayBuffer;
+              if (!arrayBuffer) {
+                reject(new Error('Failed to read file'));
+                return;
+              }
+              
+              const buffer = Buffer.from(arrayBuffer);
+              console.log(`File read successfully: ${file.name}, size: ${buffer.length} bytes`);
+              resolve(buffer);
+            } catch (error) {
+              reject(new Error(`Buffer creation failed: ${error}`));
+            }
+          };
+          
+          reader.onerror = () => {
+            reject(new Error('File reading failed'));
+          };
+          
+          reader.readAsArrayBuffer(file);
+        });
+      };
+
+      // Read the file and create buffer
+      const fileBuffer = await readFileAsBuffer(file);
       
       // Upload the file to Telegram servers
       const uploadedFile = await client.uploadFile({
-        file: buffer,
+        file: fileBuffer,
         workers: 1,
       });
 
@@ -286,7 +315,10 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         if (error.message.includes('session has expired') || 
             error.message.includes('must be logged in') ||
             error.message.includes('File size') ||
-            error.message.includes('client is not initialized')) {
+            error.message.includes('client is not initialized') ||
+            error.message.includes('Failed to read file') ||
+            error.message.includes('Buffer creation failed') ||
+            error.message.includes('File reading failed')) {
           errorMessage = error.message;
         } else if (error.message.includes('FLOOD_WAIT')) {
           errorMessage = 'Rate limit exceeded. Please wait a moment before uploading again.';
@@ -298,13 +330,19 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
           localStorage.removeItem('session');
         } else if (error.message.includes('CONNECTION_NOT_INITED')) {
           errorMessage = 'Connection lost. Please try again.';
+        } else if (error.message.includes('Could not create buffer')) {
+          errorMessage = 'File processing failed. The file might be corrupted or in an unsupported format.';
         }
       }
 
-      console.error('File upload error:', {
+      console.error('File upload error details:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
         message: error.message,
         code: error.code,
-        type: error.constructor.name
+        type: error.constructor.name,
+        stack: error.stack
       });
 
       const uploadError = new Error(errorMessage);
