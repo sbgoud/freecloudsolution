@@ -106,8 +106,9 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
       
       localStorage.setItem('session', client.session.save() as string);
       setIsLoggedIn(true);
+      setIsTwoFactorRequired(false);
     } catch (error: any) {
-      if (error.error_message === 'SESSION_PASSWORD_NEEDED') {
+      if (error.errorMessage === 'SESSION_PASSWORD_NEEDED') {
         setIsTwoFactorRequired(true);
       } else {
         console.error('Code verification error:', error);
@@ -125,12 +126,18 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         await client.connect();
       }
       
+      const credentials = await client.invoke(
+        new Api.account.GetPassword()
+      );
+      
+      const { srpId, A, M1 } = await client.computeSrpParams(credentials, password);
+      
       await client.invoke(
         new Api.auth.CheckPassword({
           password: new Api.InputCheckPasswordSRP({
-            srpId: BigInt(0),
-            A: Buffer.from(''),
-            M1: Buffer.from('')
+            srpId,
+            A,
+            M1
           })
         })
       );
