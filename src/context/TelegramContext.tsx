@@ -131,16 +131,56 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         new Api.account.GetPassword()
       );
       
-      // Dynamically import computeCheckPassword and use it
-      const { computeCheckPassword } = await import('telegram/Password');
-      const checkPassword = await computeCheckPassword(passwordConfig, password);
+      // Try multiple approaches to import and use the Password module
+      let checkPassword;
+      let importError;
       
-      // Use the computed parameters to check the password
-      await client.invoke(
-        new Api.auth.CheckPassword({
-          password: checkPassword
-        })
-      );
+      // Approach 1: Direct import
+      try {
+        const { computeCheckPassword } = await import('telegram/Password');
+        if (typeof computeCheckPassword === 'function') {
+          checkPassword = await computeCheckPassword(passwordConfig, password);
+        }
+      } catch (e) {
+        importError = e;
+      }
+      
+      // Approach 2: Default import
+      if (!checkPassword) {
+        try {
+          const PasswordModule = await import('telegram/Password');
+          const computeCheckPassword = PasswordModule.default || PasswordModule.computeCheckPassword;
+          if (typeof computeCheckPassword === 'function') {
+            checkPassword = await computeCheckPassword(passwordConfig, password);
+          }
+        } catch (e) {
+          importError = e;
+        }
+      }
+      
+      // Approach 3: Access through client (if available)
+      if (!checkPassword) {
+        try {
+          const clientCompute = (client as any).computeCheckPassword;
+          if (typeof clientCompute === 'function') {
+            checkPassword = await clientCompute(passwordConfig, password);
+          }
+        } catch (e) {
+          importError = e;
+        }
+      }
+      
+      // If we have checkPassword parameters, use them
+      if (checkPassword) {
+        await client.invoke(
+          new Api.auth.CheckPassword({
+            password: checkPassword
+          })
+        );
+      } else {
+        console.error('All import attempts failed:', importError);
+        throw new Error('Failed to verify password - SRP computation not available. Please check console for details.');
+      }
       
       localStorage.setItem('session', client.session.save() as string);
       setIsLoggedIn(true);
