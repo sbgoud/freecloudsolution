@@ -258,8 +258,15 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         // Try to get nearest DC for optimal routing
         const config = await client.invoke(new Api.help.GetConfig());
         console.log(`📡 Using DC: ${config.thisDc}, available DCs: ${config.dcOptions?.length || 0}`);
+        
+        // Log available DCs for debugging
+        if (config.dcOptions) {
+          const mediaDCs = config.dcOptions.filter(dc => dc.mediaOnly);
+          console.log(`🎯 Media-optimized DCs available: ${mediaDCs.length}`);
+          mediaDCs.forEach(dc => console.log(`   - DC ${dc.id}: ${dc.ipAddress} (${dc.mediaOnly ? 'Media Only' : 'General'})`));
+        }
       } catch (dcError) {
-        console.log('📡 Using default DC connection');
+        console.log('📡 Using default DC connection (DC optimization failed)');
       }
 
       // Generate unique file ID (64-bit integer) - use long type for Telegram API
@@ -352,7 +359,14 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
       };
 
       // Execute parallel upload
-      await uploadAllParts();
+      console.log('🚀 Starting parallel upload process...');
+      try {
+        await uploadAllParts();
+        console.log('✅ All upload parts completed successfully!');
+      } catch (uploadError) {
+        console.error('❌ Parallel upload failed:', uploadError);
+        throw uploadError;
+      }
 
       console.log('All parts uploaded successfully. Creating InputFile...');
 
