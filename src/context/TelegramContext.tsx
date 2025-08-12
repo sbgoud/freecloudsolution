@@ -245,10 +245,10 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('Your session has expired. Please log in again.');
       }
 
-      // Validate file size (50MB limit)
-      const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+      // Validate file size (2GB limit)
+      const maxSize = 2 * 1024 * 1024 * 1024; // 2GB in bytes
       if (file.size > maxSize) {
-        throw new Error(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the 50MB limit.`);
+        throw new Error(`File size (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB) exceeds the 2GB limit.`);
       }
 
       console.log(`Starting MTProto upload for file: ${file.name}, size: ${file.size} bytes`);

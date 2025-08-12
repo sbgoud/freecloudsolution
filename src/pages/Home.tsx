@@ -126,7 +126,7 @@ const Home = () => {
             onFileSelect={handleFileSelect}
             onUpload={handleFileUpload}
             onError={handleFileError}
-            maxSizeInMB={50}
+            maxSizeInMB={2048} // 2GB = 2048MB
             acceptedTypes={[]} // Allow all file types
           />
         </div>

@@ -17,7 +17,7 @@ const FileUpload = ({
   onFileSelect, 
   onUpload, 
   onError,
-  maxSizeInMB = 50, 
+  maxSizeInMB = 2048, // Default to 2GB
   acceptedTypes = [],
   className 
 }: FileUploadProps) => {
@@ -195,7 +195,7 @@ const FileUpload = ({
                 </p>
                 {maxSizeInMB && (
                   <p className="text-xs text-gray-400 mt-2">
-                    Maximum file size: {maxSizeInMB}MB
+                    Maximum file size: {maxSizeInMB >= 1024 ? `${(maxSizeInMB / 1024).toFixed(0)}GB` : `${maxSizeInMB}MB`}
                   </p>
                 )}
               </div>
