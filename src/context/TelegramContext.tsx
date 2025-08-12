@@ -293,21 +293,27 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
       });
 
       // MTProto file upload rules - OPTIMIZED for speed
-      const PART_SIZE = 4 * 1024 * 1024; // 4MB chunks (maximum allowed by Telegram)
+      const PART_SIZE = 1 * 1024 * 1024; // 1MB chunks (safe for MTProto protocol)
       const totalParts = Math.ceil(fileBuffer.length / PART_SIZE);
       const isBigFile = file.size >= 10 * 1024 * 1024; // 10MB threshold
-      const MAX_PARALLEL_UPLOADS = 6; // Optimal parallel connections
+      const MAX_PARALLEL_UPLOADS = 8; // Increased parallel connections to compensate for smaller chunks
 
       console.log(`File will be uploaded in ${totalParts} parts of ${PART_SIZE} bytes each. Big file: ${isBigFile}`);
       console.log(`Using ${MAX_PARALLEL_UPLOADS} parallel connections for faster upload`);
 
-      // Parallel upload function
-      const uploadPart = async (partIndex: number): Promise<void> => {
+      // Parallel upload function with connection retry
+      const uploadPart = async (partIndex: number, retryCount = 0): Promise<void> => {
         const start = partIndex * PART_SIZE;
         const end = Math.min(start + PART_SIZE, fileBuffer.length);
         const partBytes = fileBuffer.slice(start, end);
 
         try {
+          // Ensure client is connected before each upload
+          if (!client.connected) {
+            console.log(`🔌 Reconnecting client for part ${partIndex + 1}...`);
+            await client.connect();
+          }
+
           if (isBigFile) {
             await client.invoke(
               new Api.upload.SaveBigFilePart({
@@ -333,7 +339,11 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
             console.log(`⏳ Rate limited, waiting ${waitTime} seconds before retry...`);
             await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
             // Retry the same part
-            return uploadPart(partIndex);
+            return uploadPart(partIndex, retryCount);
+          } else if (error.message && (error.message.includes('TIMEOUT') || error.message.includes('Not connected')) && retryCount < 3) {
+            console.log(`🔄 Connection error for part ${partIndex + 1}, retrying (${retryCount + 1}/3)...`);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+            return uploadPart(partIndex, retryCount + 1);
           }
           throw error;
         }
