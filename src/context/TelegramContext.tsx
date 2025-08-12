@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { Api } from 'telegram';
-import { computeSRP } from 'telegram/Password';
 
 // Hardcoded credentials (user will change manually later)
 const API_ID = 20134869;
@@ -119,7 +118,7 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const sendPassword = async (password: string) => {
-    if (!client) return;
+    if (!client || !phone || !phoneCodeHash) return;
     
     try {
       // Ensure client is connected before sending password
@@ -127,22 +126,12 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         await client.connect();
       }
       
-      const passwordResult = await client.invoke(
-        new Api.account.GetPassword()
-      );
-      
-      // Use the correct function to compute SRP parameters
-      const srpParams = await computeSRP(passwordResult, password);
-      
-      await client.invoke(
-        new Api.auth.CheckPassword({
-          password: new Api.InputCheckPasswordSRP({
-            srpId: srpParams.srpId,
-            A: srpParams.A,
-            M1: srpParams.M1
-          })
-        })
-      );
+      // Use the signIn method with password parameter for 2FA accounts
+      await client.signIn({
+        phone: phone,
+        phoneCodeHash: phoneCodeHash,
+        password: password
+      });
       
       localStorage.setItem('session', client.session.save() as string);
       setIsLoggedIn(true);
