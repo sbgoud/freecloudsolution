@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { Api } from 'telegram';
-import { computeSrpParams } from 'telegram/Password';
+import { computeSRP } from 'telegram/Password';
 
 // Hardcoded credentials (user will change manually later)
 const API_ID = 20134869;
@@ -127,18 +127,19 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         await client.connect();
       }
       
-      const credentials = await client.invoke(
+      const passwordResult = await client.invoke(
         new Api.account.GetPassword()
       );
       
-      const { srpId, A, M1 } = await computeSrpParams(credentials, password);
+      // Use the correct function to compute SRP parameters
+      const srpParams = await computeSRP(passwordResult, password);
       
       await client.invoke(
         new Api.auth.CheckPassword({
           password: new Api.InputCheckPasswordSRP({
-            srpId,
-            A,
-            M1
+            srpId: srpParams.srpId,
+            A: srpParams.A,
+            M1: srpParams.M1
           })
         })
       );
