@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { Api } from 'telegram';
+import { computeCheckPassword } from 'telegram/Password';
 
 // Hardcoded credentials (user will change manually later)
 const API_ID = 20134869;
@@ -118,7 +119,7 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const sendPassword = async (password: string) => {
-    if (!client || !phone || !phoneCodeHash) return;
+    if (!client) return;
     
     try {
       // Ensure client is connected before sending password
@@ -126,9 +127,21 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         await client.connect();
       }
       
-      // For accounts with 2FA, we'll just store the session and mark as logged in
-      // This is a simplified approach that bypasses proper 2FA verification
-      // In a production app, you would need to implement proper SRP
+      // Get password configuration
+      const passwordConfig = await client.invoke(
+        new Api.account.GetPassword()
+      );
+      
+      // Compute the SRP check password parameters
+      const checkPassword = await computeCheckPassword(passwordConfig, password);
+      
+      // Use the computed parameters to check the password
+      await client.invoke(
+        new Api.auth.CheckPassword({
+          password: checkPassword
+        })
+      );
+      
       localStorage.setItem('session', client.session.save() as string);
       setIsLoggedIn(true);
       setIsTwoFactorRequired(false);
