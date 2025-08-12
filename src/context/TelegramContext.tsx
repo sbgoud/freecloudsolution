@@ -251,50 +251,96 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the 50MB limit.`);
       }
 
-      // Create a proper file reader for Telegram API
-      const readFileAsBuffer = (file: File): Promise<Buffer> => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          
-          reader.onload = (event) => {
-            try {
-              const arrayBuffer = event.target?.result as ArrayBuffer;
-              if (!arrayBuffer) {
-                reject(new Error('Failed to read file'));
-                return;
-              }
-              
-              const buffer = Buffer.from(arrayBuffer);
-              console.log(`File read successfully: ${file.name}, size: ${buffer.length} bytes`);
-              resolve(buffer);
-            } catch (error) {
-              reject(new Error(`Buffer creation failed: ${error}`));
-            }
-          };
-          
-          reader.onerror = () => {
-            reject(new Error('File reading failed'));
-          };
-          
-          reader.readAsArrayBuffer(file);
-        });
-      };
+      console.log(`Starting MTProto upload for file: ${file.name}, size: ${file.size} bytes`);
 
-      // Read the file and create buffer
-      const fileBuffer = await readFileAsBuffer(file);
+      // Generate unique file ID (64-bit integer)
+      const fileId = Math.floor(Math.random() * 0x7fffffffffffffff);
       
-      // Upload the file to Telegram servers
-      const uploadedFile = await client.uploadFile({
-        file: fileBuffer,
-        workers: 1,
+      // Read file data
+      const fileBuffer = await new Promise<Buffer>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const arrayBuffer = event.target?.result as ArrayBuffer;
+            if (!arrayBuffer) {
+              reject(new Error('Failed to read file'));
+              return;
+            }
+            const buffer = Buffer.from(arrayBuffer);
+            resolve(buffer);
+          } catch (error) {
+            reject(new Error(`Buffer creation failed: ${error}`));
+          }
+        };
+        reader.onerror = () => reject(new Error('File reading failed'));
+        reader.readAsArrayBuffer(file);
       });
+
+      // MTProto file upload rules
+      const PART_SIZE = 512 * 1024; // 512KB (recommended maximum)
+      const totalParts = Math.ceil(fileBuffer.length / PART_SIZE);
+      const isBigFile = file.size >= 10 * 1024 * 1024; // 10MB threshold
+
+      console.log(`File will be uploaded in ${totalParts} parts of ${PART_SIZE} bytes each. Big file: ${isBigFile}`);
+
+      // Upload file parts
+      for (let partIndex = 0; partIndex < totalParts; partIndex++) {
+        const start = partIndex * PART_SIZE;
+        const end = Math.min(start + PART_SIZE, fileBuffer.length);
+        const partBytes = fileBuffer.slice(start, end);
+
+        console.log(`Uploading part ${partIndex + 1}/${totalParts}, bytes ${start}-${end}`);
+
+        if (isBigFile) {
+          // Use upload.saveBigFilePart for files >= 10MB
+          await client.invoke(
+            new Api.upload.SaveBigFilePart({
+              fileId: fileId,
+              filePart: partIndex,
+              fileTotalParts: totalParts,
+              bytes: partBytes,
+            })
+          );
+        } else {
+          // Use upload.saveFilePart for files < 10MB
+          await client.invoke(
+            new Api.upload.SaveFilePart({
+              fileId: fileId,
+              filePart: partIndex,
+              bytes: partBytes,
+            })
+          );
+        }
+      }
+
+      console.log('All parts uploaded successfully. Creating InputFile...');
+
+      // Create InputFile based on upload method used
+      let inputFile;
+      if (isBigFile) {
+        inputFile = new Api.InputFileBig({
+          id: fileId,
+          parts: totalParts,
+          name: file.name,
+        });
+      } else {
+        // For small files, MD5 checksum is optional, so we'll provide an empty string
+        inputFile = new Api.InputFile({
+          id: fileId,
+          parts: totalParts,
+          name: file.name,
+          md5Checksum: '', // MD5 is optional for file uploads
+        });
+      }
+
+      console.log('Sending file to saved messages...');
 
       // Send the file to saved messages
       await client.invoke(
         new Api.messages.SendMedia({
           peer: 'self', // Send to saved messages
           media: new Api.InputMediaUploadedDocument({
-            file: uploadedFile,
+            file: inputFile,
             mimeType: file.type || 'application/octet-stream',
             attributes: [
               new Api.DocumentAttributeFilename({
@@ -306,6 +352,9 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
           randomId: Math.floor(Math.random() * 0xffffffff),
         })
       );
+
+      console.log('File uploaded successfully to saved messages!');
+
     } catch (error: any) {
       // Provide user-friendly error messages
       let errorMessage = 'Failed to upload file. Please try again.';
@@ -322,16 +371,18 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
           errorMessage = error.message;
         } else if (error.message.includes('FLOOD_WAIT')) {
           errorMessage = 'Rate limit exceeded. Please wait a moment before uploading again.';
-        } else if (error.message.includes('FILE_PARTS_INVALID')) {
-          errorMessage = 'File upload failed due to corruption. Please try again.';
+        } else if (error.message.includes('FILE_PART_') && error.message.includes('_MISSING')) {
+          errorMessage = 'A file part was missing during upload. Please try again.';
+        } else if (error.message.includes('MD5_CHECKSUM_INVALID')) {
+          errorMessage = 'File checksum validation failed. The file may be corrupted.';
         } else if (error.message.includes('AUTH_KEY_UNREGISTERED')) {
           errorMessage = 'Your session has expired. Please log in again.';
           setIsLoggedIn(false);
           localStorage.removeItem('session');
         } else if (error.message.includes('CONNECTION_NOT_INITED')) {
           errorMessage = 'Connection lost. Please try again.';
-        } else if (error.message.includes('Could not create buffer')) {
-          errorMessage = 'File processing failed. The file might be corrupted or in an unsupported format.';
+        } else if (error.message.includes('FILE_MIGRATE_')) {
+          errorMessage = 'File needs to be uploaded to a different server. Please try again.';
         }
       }
 
