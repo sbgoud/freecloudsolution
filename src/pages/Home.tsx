@@ -4,12 +4,15 @@ import { useTelegram } from '@/context/TelegramContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import FileUpload from '@/components/ui/file-upload';
+import { useToast } from '@/hooks/use-toast';
 
 const Home = () => {
   const navigate = useNavigate();
-  const { isLoggedIn, fetchMessages, logout } = useTelegram();
+  const { isLoggedIn, fetchMessages, logout, uploadFile } = useTelegram();
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   // Redirect to login if not logged in
   useEffect(() => {
@@ -40,6 +43,30 @@ const Home = () => {
       loadMessages();
     }
   }, [isLoggedIn]);
+
+  const handleFileSelect = (file: File) => {
+    console.log('File selected:', file.name);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    try {
+      await uploadFile(file);
+      toast({
+        title: "File uploaded successfully!",
+        description: `${file.name} has been saved to your Telegram messages.`,
+      });
+      // Refresh messages to show the newly uploaded file
+      await loadMessages();
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: "There was an error uploading your file. Please try again.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 p-4">
@@ -83,6 +110,17 @@ const Home = () => {
         ) : (
           <p>No messages found.</p>
         )}
+
+        {/* File Upload Section */}
+        <div className="mt-8">
+          <h2 className="text-xl font-semibold mb-4">Upload File to Saved Messages</h2>
+          <FileUpload
+            onFileSelect={handleFileSelect}
+            onUpload={handleFileUpload}
+            maxSizeInMB={50}
+            acceptedTypes={[]} // Allow all file types
+          />
+        </div>
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ interface TelegramContextType {
   sendPassword: (password: string) => Promise<void>;
   logout: () => void;
   fetchMessages: () => Promise<any[]>;
+  uploadFile: (file: File) => Promise<void>;
   isTwoFactorRequired: boolean;
 }
 
@@ -200,6 +201,47 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const uploadFile = async (file: File) => {
+    if (!client) throw new Error('Client not initialized');
+    
+    try {
+      // Ensure client is connected before uploading
+      if (!client.connected) {
+        await client.connect();
+      }
+
+      // Convert File to Buffer for Telegram API
+      const buffer = Buffer.from(await file.arrayBuffer());
+      
+      // Upload the file to Telegram servers
+      const uploadedFile = await client.uploadFile({
+        file: buffer,
+        workers: 1,
+      });
+
+      // Send the file to saved messages
+      await client.invoke(
+        new Api.messages.SendMedia({
+          peer: 'self', // Send to saved messages
+          media: new Api.InputMediaUploadedDocument({
+            file: uploadedFile,
+            mimeType: file.type || 'application/octet-stream',
+            attributes: [
+              new Api.DocumentAttributeFilename({
+                fileName: file.name,
+              }),
+            ],
+          }),
+          message: `Uploaded file: ${file.name}`,
+          randomId: Math.floor(Math.random() * 0xffffffff),
+        })
+      );
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      throw error;
+    }
+  };
+
   const value = {
     client,
     isLoggedIn,
@@ -208,6 +250,7 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     sendPassword,
     logout,
     fetchMessages,
+    uploadFile,
     isTwoFactorRequired
   };
 
