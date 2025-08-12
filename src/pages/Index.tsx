@@ -16,11 +16,11 @@ const Index = () => {
   }, [isLoggedIn, navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
       <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Telegram Web</h1>
+        <h1 className="text-4xl font-bold mb-4">Welcome to Telegram Web Client</h1>
         <p className="text-xl text-gray-600">
-          Redirecting...
+          Securely access your Telegram messages from anywhere
         </p>
       </div>
       <MadeWithDyad />
