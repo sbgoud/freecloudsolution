@@ -5,8 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
 
 const countryCodes = [
   { code: '+91', name: 'India' },
@@ -29,7 +27,6 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
   const { 
     isLoggedIn, 
     login, 
@@ -49,12 +46,11 @@ const Login = () => {
     const fullPhone = `${countryCode}${phoneNumber}`;
     if (!fullPhone) return;
     setIsLoading(true);
-    setError('');
     try {
       await login(fullPhone);
       setIsCodeSent(true);
-    } catch (error: any) {
-      setError(error.message || 'Failed to send code');
+    } catch (error) {
+      console.error('Failed to send code', error);
     } finally {
       setIsLoading(false);
     }
@@ -63,16 +59,10 @@ const Login = () => {
   const handleVerifyCode = async () => {
     if (!code) return;
     setIsLoading(true);
-    setError('');
     try {
       await sendCode(code);
-    } catch (error: any) {
-      if (error.message && error.message.includes('2FA')) {
-        // This is expected for 2FA accounts
-        setIsCodeSent(true);
-      } else {
-        setError(error.message || 'Failed to verify code');
-      }
+    } catch (error) {
+      console.error('Failed to verify code', error);
     } finally {
       setIsLoading(false);
     }
@@ -81,11 +71,10 @@ const Login = () => {
   const handleSendPassword = async () => {
     if (!password) return;
     setIsLoading(true);
-    setError('');
     try {
       await sendPassword(password);
-    } catch (error: any) {
-      setError(error.message || 'Failed to verify password');
+    } catch (error) {
+      console.error('Failed to verify password', error);
     } finally {
       setIsLoading(false);
     }
@@ -105,13 +94,6 @@ const Login = () => {
                 : 'Enter your phone number'}
           </p>
         </div>
-        
-        {error && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
         
         {isTwoFactorRequired ? (
           <div className="space-y-4">
