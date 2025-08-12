@@ -57,15 +57,23 @@ const Home = () => {
       });
       // Refresh messages to show the newly uploaded file
       await loadMessages();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload error:', error);
       toast({
         title: "Upload failed",
-        description: "There was an error uploading your file. Please try again.",
+        description: error.message || "There was an error uploading your file. Please try again.",
         variant: "destructive",
       });
       throw error;
     }
+  };
+
+  const handleFileError = (error: string) => {
+    toast({
+      title: "File validation error",
+      description: error,
+      variant: "destructive",
+    });
   };
 
   return (
@@ -117,6 +125,7 @@ const Home = () => {
           <FileUpload
             onFileSelect={handleFileSelect}
             onUpload={handleFileUpload}
+            onError={handleFileError}
             maxSizeInMB={50}
             acceptedTypes={[]} // Allow all file types
           />

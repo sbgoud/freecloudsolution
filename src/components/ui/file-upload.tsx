@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
   onUpload: (file: File) => Promise<void>;
+  onError?: (error: string) => void;
   maxSizeInMB?: number;
   acceptedTypes?: string[];
   className?: string;
@@ -15,6 +16,7 @@ interface FileUploadProps {
 const FileUpload = ({ 
   onFileSelect, 
   onUpload, 
+  onError,
   maxSizeInMB = 50, 
   acceptedTypes = [],
   className 
@@ -53,7 +55,11 @@ const FileUpload = ({
   const handleFileSelect = (file: File) => {
     const error = validateFile(file);
     if (error) {
-      alert(error);
+      if (onError) {
+        onError(error);
+      } else {
+        console.error('File validation error:', error);
+      }
       return;
     }
 
@@ -98,9 +104,11 @@ const FileUpload = ({
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Upload failed:', error);
-      alert('Upload failed. Please try again.');
+      if (onError) {
+        onError(error.message || 'Upload failed. Please try again.');
+      }
     } finally {
       setIsUploading(false);
     }

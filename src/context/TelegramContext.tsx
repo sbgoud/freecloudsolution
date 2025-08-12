@@ -38,24 +38,41 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const initializeClient = async () => {
-      const session = new StringSession(localStorage.getItem('session') || '');
-      const newClient = new TelegramClient(
-        session,
-        API_ID,
-        API_HASH,
-        { connectionRetries: 5 }
-      );
-      
-      setClient(newClient);
-      
-      if (session.save()) {
-        try {
-          await newClient.connect();
-          setIsLoggedIn(true);
-        } catch (e) {
-          console.error('Session restore failed', e);
-          localStorage.removeItem('session');
+      try {
+        const sessionString = localStorage.getItem('session') || '';
+        const session = new StringSession(sessionString);
+        const newClient = new TelegramClient(
+          session,
+          API_ID,
+          API_HASH,
+          { connectionRetries: 5 }
+        );
+        
+        setClient(newClient);
+        
+        // Only try to restore session if we have a valid session string
+        if (sessionString && sessionString.length > 0) {
+          try {
+            await newClient.connect();
+            // Verify the session is still valid by trying to get account info
+            await newClient.invoke(new Api.users.GetFullUser({
+              id: new Api.InputUserSelf()
+            }));
+            setIsLoggedIn(true);
+          } catch (e) {
+            console.error('Session restore failed, clearing invalid session:', e.message || e);
+            localStorage.removeItem('session');
+            setIsLoggedIn(false);
+            if (newClient.connected) {
+              await newClient.disconnect();
+            }
+          }
+        } else {
+          setIsLoggedIn(false);
         }
+      } catch (error) {
+        console.error('Failed to initialize client:', error);
+        setIsLoggedIn(false);
       }
     };
 
@@ -202,12 +219,36 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const uploadFile = async (file: File) => {
-    if (!client) throw new Error('Client not initialized');
+    if (!client) {
+      throw new Error('Telegram client is not initialized. Please try logging in again.');
+    }
     
+    if (!isLoggedIn) {
+      throw new Error('You must be logged in to upload files.');
+    }
+
     try {
       // Ensure client is connected before uploading
       if (!client.connected) {
         await client.connect();
+      }
+
+      // Verify we're still authenticated
+      try {
+        await client.invoke(new Api.users.GetFullUser({
+          id: new Api.InputUserSelf()
+        }));
+      } catch (authError) {
+        console.error('Authentication verification failed:', authError);
+        setIsLoggedIn(false);
+        localStorage.removeItem('session');
+        throw new Error('Your session has expired. Please log in again.');
+      }
+
+      // Validate file size (50MB limit)
+      const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+      if (file.size > maxSize) {
+        throw new Error(`File size (${(file.size / (1024 * 1024)).toFixed(1)}MB) exceeds the 50MB limit.`);
       }
 
       // Convert File to Buffer for Telegram API
@@ -236,9 +277,39 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
           randomId: Math.floor(Math.random() * 0xffffffff),
         })
       );
-    } catch (error) {
-      console.error('Error uploading file:', error);
-      throw error;
+    } catch (error: any) {
+      // Provide user-friendly error messages
+      let errorMessage = 'Failed to upload file. Please try again.';
+      
+      if (error.message) {
+        // If we already have a user-friendly message, use it
+        if (error.message.includes('session has expired') || 
+            error.message.includes('must be logged in') ||
+            error.message.includes('File size') ||
+            error.message.includes('client is not initialized')) {
+          errorMessage = error.message;
+        } else if (error.message.includes('FLOOD_WAIT')) {
+          errorMessage = 'Rate limit exceeded. Please wait a moment before uploading again.';
+        } else if (error.message.includes('FILE_PARTS_INVALID')) {
+          errorMessage = 'File upload failed due to corruption. Please try again.';
+        } else if (error.message.includes('AUTH_KEY_UNREGISTERED')) {
+          errorMessage = 'Your session has expired. Please log in again.';
+          setIsLoggedIn(false);
+          localStorage.removeItem('session');
+        } else if (error.message.includes('CONNECTION_NOT_INITED')) {
+          errorMessage = 'Connection lost. Please try again.';
+        }
+      }
+
+      console.error('File upload error:', {
+        message: error.message,
+        code: error.code,
+        type: error.constructor.name
+      });
+
+      const uploadError = new Error(errorMessage);
+      uploadError.cause = error;
+      throw uploadError;
     }
   };
 
