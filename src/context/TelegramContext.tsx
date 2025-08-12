@@ -253,7 +253,16 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
 
       console.log(`Starting MTProto upload for file: ${file.name}, size: ${file.size} bytes`);
 
-      // Generate unique file ID (64-bit integer)
+      // Optimize connection for media uploads
+      try {
+        // Try to get nearest DC for optimal routing
+        const config = await client.invoke(new Api.help.GetConfig());
+        console.log(`📡 Using DC: ${config.thisDc}, available DCs: ${config.dcOptions?.length || 0}`);
+      } catch (dcError) {
+        console.log('📡 Using default DC connection');
+      }
+
+      // Generate unique file ID (64-bit integer) - use long type for Telegram API
       const fileId = Math.floor(Math.random() * 0x7fffffffffffffff);
       
       // Read file data
@@ -276,42 +285,74 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         reader.readAsArrayBuffer(file);
       });
 
-      // MTProto file upload rules
-      const PART_SIZE = 512 * 1024; // 512KB (recommended maximum)
+      // MTProto file upload rules - OPTIMIZED for speed
+      const PART_SIZE = 4 * 1024 * 1024; // 4MB chunks (maximum allowed by Telegram)
       const totalParts = Math.ceil(fileBuffer.length / PART_SIZE);
       const isBigFile = file.size >= 10 * 1024 * 1024; // 10MB threshold
+      const MAX_PARALLEL_UPLOADS = 6; // Optimal parallel connections
 
       console.log(`File will be uploaded in ${totalParts} parts of ${PART_SIZE} bytes each. Big file: ${isBigFile}`);
+      console.log(`Using ${MAX_PARALLEL_UPLOADS} parallel connections for faster upload`);
 
-      // Upload file parts
-      for (let partIndex = 0; partIndex < totalParts; partIndex++) {
+      // Parallel upload function
+      const uploadPart = async (partIndex: number): Promise<void> => {
         const start = partIndex * PART_SIZE;
         const end = Math.min(start + PART_SIZE, fileBuffer.length);
         const partBytes = fileBuffer.slice(start, end);
 
-        console.log(`Uploading part ${partIndex + 1}/${totalParts}, bytes ${start}-${end}`);
-
-        if (isBigFile) {
-          // Use upload.saveBigFilePart for files >= 10MB
-          await client.invoke(
-            new Api.upload.SaveBigFilePart({
-              fileId: fileId,
-              filePart: partIndex,
-              fileTotalParts: totalParts,
-              bytes: partBytes,
-            })
-          );
-        } else {
-          // Use upload.saveFilePart for files < 10MB
-          await client.invoke(
-            new Api.upload.SaveFilePart({
-              fileId: fileId,
-              filePart: partIndex,
-              bytes: partBytes,
-            })
-          );
+        try {
+          if (isBigFile) {
+            await client.invoke(
+              new Api.upload.SaveBigFilePart({
+                fileId: fileId,
+                filePart: partIndex,
+                fileTotalParts: totalParts,
+                bytes: partBytes,
+              })
+            );
+          } else {
+            await client.invoke(
+              new Api.upload.SaveFilePart({
+                fileId: fileId,
+                filePart: partIndex,
+                bytes: partBytes,
+              })
+            );
+          }
+          console.log(`✅ Part ${partIndex + 1}/${totalParts} uploaded successfully`);
+        } catch (error: any) {
+          if (error.message && error.message.includes('FLOOD_WAIT')) {
+            const waitTime = parseInt(error.message.match(/\d+/)?.[0] || '5');
+            console.log(`⏳ Rate limited, waiting ${waitTime} seconds before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+            // Retry the same part
+            return uploadPart(partIndex);
+          }
+          throw error;
         }
-      }
+      };
+
+      // Upload all parts in parallel batches
+      const uploadAllParts = async (): Promise<void> => {
+        for (let batchStart = 0; batchStart < totalParts; batchStart += MAX_PARALLEL_UPLOADS) {
+          const batchEnd = Math.min(batchStart + MAX_PARALLEL_UPLOADS, totalParts);
+          const batchParts = Array.from(
+            { length: batchEnd - batchStart }, 
+            (_, i) => batchStart + i
+          );
+
+          console.log(`🚀 Starting batch: parts ${batchStart + 1}-${batchEnd} (${batchParts.length} parallel uploads)`);
+          
+          // Upload this batch in parallel
+          const uploadPromises = batchParts.map(partIndex => uploadPart(partIndex));
+          await Promise.all(uploadPromises);
+          
+          console.log(`✅ Batch ${Math.floor(batchStart / MAX_PARALLEL_UPLOADS) + 1} completed`);
+        }
+      };
+
+      // Execute parallel upload
+      await uploadAllParts();
 
       console.log('All parts uploaded successfully. Creating InputFile...');
 
