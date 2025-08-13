@@ -15,7 +15,8 @@ interface TelegramContextType {
   sendPassword: (password: string) => Promise<void>;
   logout: () => void;
   fetchMessages: () => Promise<any[]>;
-  uploadFile: (file: File) => Promise<void>;
+  uploadFile: (file: File, onProgress?: (progress: number) => void) => Promise<void>;
+  uploadMultipleFiles: (files: File[], onProgress?: (fileIndex: number, progress: number) => void) => Promise<void>;
   isTwoFactorRequired: boolean;
 }
 
@@ -218,7 +219,7 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = async (file: File, onProgress?: (progress: number) => void) => {
     if (!client) {
       throw new Error('Telegram client is not initialized. Please try logging in again.');
     }
@@ -251,25 +252,9 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         throw new Error(`File size (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB) exceeds the 2GB limit.`);
       }
 
-      console.log(`Starting MTProto upload for file: ${file.name}, size: ${file.size} bytes`);
+      console.log(`Starting upload for file: ${file.name}, size: ${file.size} bytes`);
 
-      // Optimize connection for media uploads
-      try {
-        // Try to get nearest DC for optimal routing
-        const config = await client.invoke(new Api.help.GetConfig());
-        console.log(`📡 Using DC: ${config.thisDc}, available DCs: ${config.dcOptions?.length || 0}`);
-        
-        // Log available DCs for debugging
-        if (config.dcOptions) {
-          const mediaDCs = config.dcOptions.filter(dc => dc.mediaOnly);
-          console.log(`🎯 Media-optimized DCs available: ${mediaDCs.length}`);
-          mediaDCs.forEach(dc => console.log(`   - DC ${dc.id}: ${dc.ipAddress} (${dc.mediaOnly ? 'Media Only' : 'General'})`));
-        }
-      } catch (dcError) {
-        console.log('📡 Using default DC connection (DC optimization failed)');
-      }
-
-      // Generate unique file ID (64-bit integer) - use long type for Telegram API
+      // Generate unique file ID
       const fileId = Math.floor(Math.random() * 0x7fffffffffffffff);
       
       // Read file data
@@ -292,25 +277,22 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
         reader.readAsArrayBuffer(file);
       });
 
-      // MTProto file upload rules - OPTIMIZED for speed
-      const PART_SIZE = 1 * 1024 * 1024; // 1MB chunks (safe for MTProto protocol)
+      // Use conservative chunk size to avoid protocol errors
+      const PART_SIZE = 512 * 1024; // 512KB chunks (safe and reliable)
       const totalParts = Math.ceil(fileBuffer.length / PART_SIZE);
       const isBigFile = file.size >= 10 * 1024 * 1024; // 10MB threshold
-      const MAX_PARALLEL_UPLOADS = 8; // Increased parallel connections to compensate for smaller chunks
 
       console.log(`File will be uploaded in ${totalParts} parts of ${PART_SIZE} bytes each. Big file: ${isBigFile}`);
-      console.log(`Using ${MAX_PARALLEL_UPLOADS} parallel connections for faster upload`);
 
-      // Parallel upload function with connection retry
-      const uploadPart = async (partIndex: number, retryCount = 0): Promise<void> => {
+      // Upload parts sequentially with progress tracking
+      for (let partIndex = 0; partIndex < totalParts; partIndex++) {
         const start = partIndex * PART_SIZE;
         const end = Math.min(start + PART_SIZE, fileBuffer.length);
         const partBytes = fileBuffer.slice(start, end);
 
         try {
-          // Ensure client is connected before each upload
+          // Ensure client is connected
           if (!client.connected) {
-            console.log(`🔌 Reconnecting client for part ${partIndex + 1}...`);
             await client.connect();
           }
 
@@ -332,50 +314,22 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
               })
             );
           }
-          console.log(`✅ Part ${partIndex + 1}/${totalParts} uploaded successfully`);
+
+          // Update progress
+          const progress = Math.round(((partIndex + 1) / totalParts) * 100);
+          onProgress?.(progress);
+          console.log(`✅ Part ${partIndex + 1}/${totalParts} uploaded (${progress}%)`);
+
         } catch (error: any) {
           if (error.message && error.message.includes('FLOOD_WAIT')) {
             const waitTime = parseInt(error.message.match(/\d+/)?.[0] || '5');
-            console.log(`⏳ Rate limited, waiting ${waitTime} seconds before retry...`);
+            console.log(`⏳ Rate limited, waiting ${waitTime} seconds...`);
             await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-            // Retry the same part
-            return uploadPart(partIndex, retryCount);
-          } else if (error.message && (error.message.includes('TIMEOUT') || error.message.includes('Not connected')) && retryCount < 3) {
-            console.log(`🔄 Connection error for part ${partIndex + 1}, retrying (${retryCount + 1}/3)...`);
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
-            return uploadPart(partIndex, retryCount + 1);
+            partIndex--; // Retry the same part
+            continue;
           }
           throw error;
         }
-      };
-
-      // Upload all parts in parallel batches
-      const uploadAllParts = async (): Promise<void> => {
-        for (let batchStart = 0; batchStart < totalParts; batchStart += MAX_PARALLEL_UPLOADS) {
-          const batchEnd = Math.min(batchStart + MAX_PARALLEL_UPLOADS, totalParts);
-          const batchParts = Array.from(
-            { length: batchEnd - batchStart }, 
-            (_, i) => batchStart + i
-          );
-
-          console.log(`🚀 Starting batch: parts ${batchStart + 1}-${batchEnd} (${batchParts.length} parallel uploads)`);
-          
-          // Upload this batch in parallel
-          const uploadPromises = batchParts.map(partIndex => uploadPart(partIndex));
-          await Promise.all(uploadPromises);
-          
-          console.log(`✅ Batch ${Math.floor(batchStart / MAX_PARALLEL_UPLOADS) + 1} completed`);
-        }
-      };
-
-      // Execute parallel upload
-      console.log('🚀 Starting parallel upload process...');
-      try {
-        await uploadAllParts();
-        console.log('✅ All upload parts completed successfully!');
-      } catch (uploadError) {
-        console.error('❌ Parallel upload failed:', uploadError);
-        throw uploadError;
       }
 
       console.log('All parts uploaded successfully. Creating InputFile...');
@@ -389,12 +343,11 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
           name: file.name,
         });
       } else {
-        // For small files, MD5 checksum is optional, so we'll provide an empty string
         inputFile = new Api.InputFile({
           id: fileId,
           parts: totalParts,
           name: file.name,
-          md5Checksum: '', // MD5 is optional for file uploads
+          md5Checksum: '',
         });
       }
 
@@ -403,7 +356,7 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
       // Send the file to saved messages
       await client.invoke(
         new Api.messages.SendMedia({
-          peer: 'self', // Send to saved messages
+          peer: 'self',
           media: new Api.InputMediaUploadedDocument({
             file: inputFile,
             mimeType: file.type || 'application/octet-stream',
@@ -421,11 +374,9 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
       console.log('File uploaded successfully to saved messages!');
 
     } catch (error: any) {
-      // Provide user-friendly error messages
       let errorMessage = 'Failed to upload file. Please try again.';
       
       if (error.message) {
-        // If we already have a user-friendly message, use it
         if (error.message.includes('session has expired') || 
             error.message.includes('must be logged in') ||
             error.message.includes('File size') ||
@@ -467,6 +418,27 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const uploadMultipleFiles = async (files: File[], onProgress?: (fileIndex: number, progress: number) => void) => {
+    console.log(`Starting upload of ${files.length} files...`);
+    
+    for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+      const file = files[fileIndex];
+      console.log(`Uploading file ${fileIndex + 1}/${files.length}: ${file.name}`);
+      
+      try {
+        await uploadFile(file, (progress) => {
+          onProgress?.(fileIndex, progress);
+        });
+        console.log(`✅ File ${fileIndex + 1}/${files.length} uploaded successfully`);
+      } catch (error) {
+        console.error(`❌ Failed to upload file ${fileIndex + 1}/${files.length}: ${file.name}`, error);
+        throw error;
+      }
+    }
+    
+    console.log('All files uploaded successfully!');
+  };
+
   const value = {
     client,
     isLoggedIn,
@@ -476,6 +448,7 @@ export const TelegramProvider = ({ children }: { children: ReactNode }) => {
     logout,
     fetchMessages,
     uploadFile,
+    uploadMultipleFiles,
     isTwoFactorRequired
   };
 

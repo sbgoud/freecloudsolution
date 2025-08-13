@@ -1,16 +1,18 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Upload, File, X } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Upload, File, X, FolderOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface FileUploadProps {
-  onFileSelect: (file: File) => void;
-  onUpload: (file: File) => Promise<void>;
+  onFileSelect?: (files: File[]) => void;
+  onUpload: (files: File[]) => Promise<void>;
   onError?: (error: string) => void;
   maxSizeInMB?: number;
   acceptedTypes?: string[];
   className?: string;
+  multiple?: boolean;
 }
 
 const FileUpload = ({ 
@@ -19,18 +21,21 @@ const FileUpload = ({
   onError,
   maxSizeInMB = 2048, // Default to 2GB
   acceptedTypes = [],
-  className 
+  className,
+  multiple = true
 }: FileUploadProps) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
+  const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const validateFile = (file: File): string | null => {
     // Check file size
     const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
     if (file.size > maxSizeInBytes) {
-      return `File size must be less than ${maxSizeInMB}MB`;
+      return `File size must be less than ${maxSizeInMB >= 1024 ? `${(maxSizeInMB / 1024).toFixed(0)}GB` : `${maxSizeInMB}MB`}`;
     }
 
     // Check file type if specified
@@ -52,19 +57,30 @@ const FileUpload = ({
     return null;
   };
 
-  const handleFileSelect = (file: File) => {
-    const error = validateFile(file);
-    if (error) {
-      if (onError) {
-        onError(error);
+  const handleFileSelect = (files: File[]) => {
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+
+    files.forEach(file => {
+      const error = validateFile(file);
+      if (error) {
+        errors.push(`${file.name}: ${error}`);
       } else {
-        console.error('File validation error:', error);
+        validFiles.push(file);
+      }
+    });
+
+    if (errors.length > 0) {
+      if (onError) {
+        onError(errors.join('\n'));
+      } else {
+        console.error('File validation errors:', errors);
       }
       return;
     }
 
-    setSelectedFile(file);
-    onFileSelect(file);
+    setSelectedFiles(validFiles);
+    onFileSelect?.(validFiles);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -73,7 +89,7 @@ const FileUpload = ({
     
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      handleFileSelect(files[0]);
+      handleFileSelect(files);
     }
   };
 
@@ -90,17 +106,22 @@ const FileUpload = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      handleFileSelect(files[0]);
+      handleFileSelect(Array.from(files));
     }
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (selectedFiles.length === 0) return;
 
     setIsUploading(true);
+    setUploadProgress({});
+    setCurrentFileIndex(0);
+
     try {
-      await onUpload(selectedFile);
-      setSelectedFile(null);
+      await onUpload(selectedFiles);
+      setSelectedFiles([]);
+      setUploadProgress({});
+      setCurrentFileIndex(0);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -114,19 +135,24 @@ const FileUpload = ({
     }
   };
 
-  const clearFile = () => {
-    setSelectedFile(null);
+  const clearFiles = () => {
+    setSelectedFiles([]);
+    setUploadProgress({});
+    setCurrentFileIndex(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const removeFile = (index: number) => {
+    const newFiles = selectedFiles.filter((_, i) => i !== index);
+    setSelectedFiles(newFiles);
+  };
+
+  const getOverallProgress = (): number => {
+    if (selectedFiles.length === 0) return 0;
+    const totalProgress = Object.values(uploadProgress).reduce((sum, progress) => sum + progress, 0);
+    return Math.round(totalProgress / selectedFiles.length);
   };
 
   return (
@@ -143,64 +169,102 @@ const FileUpload = ({
           onDragLeave={handleDragLeave}
           onClick={() => fileInputRef.current?.click()}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={handleInputChange}
-            accept={acceptedTypes.join(',')}
-          />
-          
-          {selectedFile ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-center space-x-3">
-                <File className="h-8 w-8 text-blue-500" />
-                <div className="text-left">
-                  <p className="font-medium text-gray-900">{selectedFile.name}</p>
-                  <p className="text-sm text-gray-500">{formatFileSize(selectedFile.size)}</p>
+                  <input
+          ref={fileInputRef}
+          type="file"
+          multiple={multiple}
+          className="hidden"
+          onChange={handleInputChange}
+          accept={acceptedTypes.join(',')}
+        />
+        
+        {selectedFiles.length > 0 ? (
+          <div className="space-y-4">
+            {/* File List */}
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {selectedFiles.map((file, index) => (
+                <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <File className="h-5 w-5 text-blue-500" />
+                    <div className="text-left">
+                      <p className="font-medium text-gray-900 text-sm">{file.name}</p>
+                      <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(index);
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    clearFile();
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              <div className="flex space-x-2">
-                <Button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleUpload();
-                  }}
-                  disabled={isUploading}
-                  className="flex-1"
-                >
-                  {isUploading ? 'Uploading...' : 'Upload to Saved Messages'}
-                </Button>
-              </div>
+              ))}
             </div>
-          ) : (
-            <div className="space-y-4">
-              <Upload className="h-12 w-12 text-gray-400 mx-auto" />
-              <div>
-                <p className="text-lg font-medium text-gray-900">Upload a file</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Drag and drop or click to select a file
+
+            {/* Progress Bar */}
+            {isUploading && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Overall Progress</span>
+                  <span>{getOverallProgress()}%</span>
+                </div>
+                <Progress value={getOverallProgress()} className="w-full" />
+                <p className="text-xs text-gray-500">
+                  Uploading file {currentFileIndex + 1} of {selectedFiles.length}
                 </p>
-                {maxSizeInMB && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    Maximum file size: {maxSizeInMB >= 1024 ? `${(maxSizeInMB / 1024).toFixed(0)}GB` : `${maxSizeInMB}MB`}
-                  </p>
-                )}
               </div>
+            )}
+            
+            <div className="flex space-x-2">
+              <Button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleUpload();
+                }}
+                disabled={isUploading}
+                className="flex-1"
+              >
+                {isUploading ? 'Uploading...' : `Upload ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} to Saved Messages`}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearFiles();
+                }}
+                disabled={isUploading}
+              >
+                Clear
+              </Button>
             </div>
-          )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {multiple ? (
+              <FolderOpen className="h-12 w-12 text-gray-400 mx-auto" />
+            ) : (
+              <Upload className="h-12 w-12 text-gray-400 mx-auto" />
+            )}
+            <div>
+              <p className="text-lg font-medium text-gray-900">
+                {multiple ? 'Upload files' : 'Upload a file'}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                Drag and drop or click to select {multiple ? 'files' : 'a file'}
+              </p>
+              {maxSizeInMB && (
+                <p className="text-xs text-gray-400 mt-2">
+                  Maximum file size: {maxSizeInMB >= 1024 ? `${(maxSizeInMB / 1024).toFixed(0)}GB` : `${maxSizeInMB}MB`}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
         </CardContent>
       </Card>
     </div>

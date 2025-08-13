@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const Home = () => {
   const navigate = useNavigate();
-  const { isLoggedIn, fetchMessages, logout, uploadFile } = useTelegram();
+  const { isLoggedIn, fetchMessages, logout, uploadFile, uploadMultipleFiles } = useTelegram();
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -44,24 +44,38 @@ const Home = () => {
     }
   }, [isLoggedIn]);
 
-  const handleFileSelect = (file: File) => {
-    console.log('File selected:', file.name);
+  const handleFileSelect = (files: File[]) => {
+    console.log('Files selected:', files.map(f => f.name));
   };
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (files: File[]) => {
     try {
-      await uploadFile(file);
-      toast({
-        title: "File uploaded successfully!",
-        description: `${file.name} has been saved to your Telegram messages.`,
-      });
-      // Refresh messages to show the newly uploaded file
+      if (files.length === 1) {
+        // Single file upload with progress
+        await uploadFile(files[0], (progress) => {
+          console.log(`Upload progress: ${progress}%`);
+        });
+        toast({
+          title: "File uploaded successfully!",
+          description: `${files[0].name} has been saved to your Telegram messages.`,
+        });
+      } else {
+        // Multiple files upload with progress
+        await uploadMultipleFiles(files, (fileIndex, progress) => {
+          console.log(`File ${fileIndex + 1} progress: ${progress}%`);
+        });
+        toast({
+          title: "Files uploaded successfully!",
+          description: `${files.length} files have been saved to your Telegram messages.`,
+        });
+      }
+      // Refresh messages to show the newly uploaded files
       await loadMessages();
     } catch (error: any) {
       console.error('Upload error:', error);
       toast({
         title: "Upload failed",
-        description: error.message || "There was an error uploading your file. Please try again.",
+        description: error.message || "There was an error uploading your files. Please try again.",
         variant: "destructive",
       });
       throw error;
