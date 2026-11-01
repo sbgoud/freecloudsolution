@@ -205,7 +205,7 @@ export function detectKind(mimeType: string, name = ''): DriveKind {
 }
 
 export function humanSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (!Number.isFinite(bytes) || bytes < 1) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const exponent = Math.min(
     Math.floor(Math.log(bytes) / Math.log(1024)),
@@ -265,6 +265,12 @@ function photoSizeBytes(photo: Api.Photo): number {
     }
   }
   return largest;
+}
+
+function toMillis(value: unknown): number {
+  const numeric = Number(value) || 0;
+  if (numeric <= 0) return 0;
+  return numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
 }
 
 function thumbCount(message: Api.Message): number {
@@ -328,7 +334,7 @@ export async function listAll(
       folders.push({
         id: message.id,
         path: meta.path,
-        date: Number(message.date) || 0,
+        date: toMillis(message.date),
       });
     } else {
       const document = getDocument(message);
@@ -347,7 +353,7 @@ export async function listAll(
           folder: dirname(path),
           size: details.size,
           mimeType: details.mimeType,
-          date: Number(message.date) || 0,
+          date: toMillis(message.date),
           kind: detectKind(details.mimeType, name),
           tagged,
           hasThumb: thumbCount(message) > 0,
@@ -361,6 +367,33 @@ export async function listAll(
 
   onProgress?.(loaded);
   return { files, folders };
+}
+
+export function messageToDriveFile(
+  message: Api.Message,
+  path: string
+): DriveFile | null {
+  const document = getDocument(message);
+  const photo = getPhoto(message);
+  if (!document && !photo) return null;
+
+  const details = makeFileName(message);
+  const normalizedPath = normalizePath(path);
+  const name = basename(normalizedPath) || details.name;
+
+  return {
+    id: message.id,
+    name,
+    path: normalizedPath,
+    folder: dirname(normalizedPath),
+    size: details.size,
+    mimeType: details.mimeType,
+    date: toMillis(message.date),
+    kind: detectKind(details.mimeType, name),
+    tagged: true,
+    hasThumb: thumbCount(message) > 0,
+    message,
+  };
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
