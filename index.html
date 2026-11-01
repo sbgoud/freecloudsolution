@@ -2,8 +2,53 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>dyad-generated-app</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>TG Drive — Your Telegram, as a private cloud drive</title>
+    <meta
+      name="description"
+      content="TG Drive turns your Telegram Saved Messages into a private, Google Drive-like file store. Open source, browser-only, and built on the official Telegram API."
+    />
+    <meta name="application-name" content="TG Drive" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f7f7f9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0f14" media="(prefers-color-scheme: dark)" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TG Drive" />
+    <meta property="og:title" content="TG Drive — Your Telegram, as a private cloud drive" />
+    <meta
+      property="og:description"
+      content="A private, open-source Google Drive-like file store built on Telegram Saved Messages. No servers, no separate storage service."
+    />
+    <meta property="og:image" content="/og-image.svg" />
+    <meta property="og:image:alt" content="TG Drive logo and tagline" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TG Drive — Your Telegram, as a private cloud drive" />
+    <meta
+      name="twitter:description"
+      content="A private, open-source Google Drive-like file store built on Telegram Saved Messages."
+    />
+    <meta name="twitter:image" content="/og-image.svg" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("tg-drive-theme");
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var dark = stored === "dark" || ((!stored || stored === "system") && prefersDark);
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (error) {
+          void error;
+        }
+      })();
+    </script>
   </head>
 
   <body>

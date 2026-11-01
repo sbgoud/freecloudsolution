@@ -72,7 +72,7 @@ export function DriveThumbnail({ client, file, className }: DriveThumbnailProps)
     <div
       ref={containerRef}
       className={cn(
-        'flex h-full w-full items-center justify-center overflow-hidden bg-muted/50',
+        'flex h-full w-full items-center justify-center overflow-hidden bg-muted/40',
         className
       )}
     >
@@ -81,15 +81,21 @@ export function DriveThumbnail({ client, file, className }: DriveThumbnailProps)
           src={url}
           alt={file.name}
           loading="lazy"
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover transition-transform duration-300 ease-smooth group-hover:scale-[1.03]"
           draggable={false}
         />
       ) : loading ? (
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="flex h-full w-full items-center justify-center bg-muted">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
       ) : file.kind === 'image' ? (
-        <ImageIcon className="h-10 w-10 text-muted-foreground/70" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border bg-card/70 text-muted-foreground shadow-sm">
+          <ImageIcon className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+        </div>
       ) : (
-        <FileIcon kind={file.kind} className="h-10 w-10" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border bg-card/70 shadow-sm">
+          <FileIcon kind={file.kind} className="h-6 w-6" />
+        </div>
       )}
     </div>
   );

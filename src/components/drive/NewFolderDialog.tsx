@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { FolderPlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -74,6 +74,9 @@ export function NewFolderDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
+            <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary sm:mx-0">
+              <FolderPlus className="h-5 w-5" />
+            </div>
             <DialogTitle>New folder</DialogTitle>
             <DialogDescription>
               Create a folder in the current location.
@@ -88,7 +91,7 @@ export function NewFolderDialog({
                 setName(event.target.value);
                 if (error) setError(null);
               }}
-              placeholder="Untitled folder"
+              placeholder="e.g. Project archive"
               autoFocus
               disabled={submitting}
             />

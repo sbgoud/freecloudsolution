@@ -1,11 +1,15 @@
 # TG Drive
 
-TG Drive turns your Telegram **Saved Messages** into a Google Drive-like file
-store. It runs entirely in the browser with [GramJS](https://github.com/gram-js/gramjs),
-so your files live in Telegram — there is no application backend and no
-separate storage service.
+TG Drive turns your Telegram **Saved Messages** into a private, Google
+Drive-like file store. It runs entirely in the browser with
+[GramJS](https://github.com/gram-js/gramjs), so your files live in Telegram.
+There is no application backend and no separate storage service.
 
-Built with Vite, React, TypeScript, Tailwind CSS and shadcn/ui.
+**TG Drive is a pure open-source project by [sbgoud](https://github.com/sbgoud/freecloudsolution).**
+
+Built with Vite, React, TypeScript, Tailwind CSS and shadcn/ui. The interface
+supports light and dark themes, follows your system preference, and is designed
+for keyboard and mobile use.
 
 ## Features
 
@@ -59,6 +63,7 @@ current path is the source of truth for folder structure.
 - There is no server or database operated by this app. Files and metadata stay
   in your own Telegram account and are fetched directly from Telegram.
 - Logging out clears the stored session and logs the client out of Telegram.
+- Theme preference is stored locally under `tg-drive-theme`.
 
 ## Local development
 
@@ -83,10 +88,10 @@ pnpm lint      # run ESLint
 
 Telegram API credentials are read from two Vite environment variables:
 
-| Variable            | Description                  |
-| ------------------- | ---------------------------- |
-| `VITE_TG_API_ID`    | Your Telegram API ID         |
-| `VITE_TG_API_HASH`  | Your Telegram API hash       |
+| Variable           | Description          |
+| ------------------ | -------------------- |
+| `VITE_TG_API_ID`   | Your Telegram API ID |
+| `VITE_TG_API_HASH` | Your Telegram API hash |
 
 Get them at <https://my.telegram.org> → **API development tools** → create an
 application, then copy the `api_id` and `api_hash` values.
@@ -97,7 +102,7 @@ For local development, copy `.env.example` to `.env` and fill in the values:
 cp .env.example .env
 ```
 
-```
+```text
 VITE_TG_API_ID=1234567
 VITE_TG_API_HASH=your_api_hash_here
 ```
@@ -111,3 +116,11 @@ VITE_TG_API_HASH=your_api_hash_here
 
 Without these variables the app falls back to built-in default credentials,
 which may be rate-limited or unavailable — set your own for reliable use.
+
+## About
+
+**TG Drive is a pure open-source project by
+[sbgoud](https://github.com/sbgoud/freecloudsolution).**
+
+Source code, issues and releases live at
+<https://github.com/sbgoud/freecloudsolution>. Contributions are welcome.

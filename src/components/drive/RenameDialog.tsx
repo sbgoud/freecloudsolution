@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -79,6 +79,9 @@ export function RenameDialog({
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
+            <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary sm:mx-0">
+              <Pencil className="h-5 w-5" />
+            </div>
             <DialogTitle>Rename {itemType}</DialogTitle>
             <DialogDescription>
               Choose a new name for this {itemType}.

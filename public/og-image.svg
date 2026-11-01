@@ -1,0 +1,15 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#F7F7F9"/>
+  <circle cx="1080" cy="80" r="260" fill="#1D4ED8" fill-opacity="0.06"/>
+  <circle cx="160" cy="620" r="300" fill="#1D4ED8" fill-opacity="0.05"/>
+  <rect x="96" y="96" width="88" height="88" rx="22" fill="#1D4ED8"/>
+  <path d="M118 123C118 119.686 120.686 117 124 117H132.5L136 120H148C151.314 120 154 122.686 154 126V149C154 152.314 151.314 155 148 155H124C120.686 155 118 152.314 118 149V123Z" fill="white" fill-opacity="0.18"/>
+  <path d="M118 123C118 119.686 120.686 117 124 117H132.5L136 120H148C151.314 120 154 122.686 154 126V149C154 152.314 151.314 155 148 155H124C120.686 155 118 152.314 118 149V123Z" stroke="white" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M126 140L142 133L137 140L142 147L126 140Z" fill="white"/>
+  <text x="208" y="153" font-family="Inter, system-ui, sans-serif" font-size="46" font-weight="650" fill="#111827">TG Drive</text>
+  <text x="96" y="300" font-family="Inter, system-ui, sans-serif" font-size="72" font-weight="650" fill="#111827">Your Telegram,</text>
+  <text x="96" y="384" font-family="Inter, system-ui, sans-serif" font-size="72" font-weight="650" fill="#1D4ED8">as a private cloud drive.</text>
+  <text x="96" y="458" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="400" fill="#4B5563">Files live in your own Saved Messages. No servers, no separate storage.</text>
+  <rect x="96" y="512" width="228" height="52" rx="12" fill="#1D4ED8" fill-opacity="0.08"/>
+  <text x="122" y="545" font-family="Inter, system-ui, sans-serif" font-size="21" font-weight="550" fill="#1D4ED8">Open source by sbgoud</text>
+</svg>

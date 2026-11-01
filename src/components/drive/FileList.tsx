@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import { Folder } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -14,6 +13,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { FileIcon } from './FileIcon';
 import { ItemMenu } from './ItemMenu';
+import { formatDateShort } from './format';
 import type { FolderEntry, ItemTarget } from './types';
 
 interface FileListProps {
@@ -31,15 +31,6 @@ interface FileListProps {
   onDelete: (target: ItemTarget) => void;
 }
 
-function formatDate(value: number): string {
-  if (!value) return '—';
-  try {
-    return format(new Date(value), 'MMM d, yyyy');
-  } catch {
-    return '—';
-  }
-}
-
 export function FileList({
   files,
   folders,
@@ -55,25 +46,32 @@ export function FileList({
   onDelete,
 }: FileListProps) {
   const isMobile = useIsMobile();
-  const allSelected = files.length > 0 && files.every((file) => selectedIds.has(file.id));
+  const allSelected =
+    files.length > 0 && files.every((file) => selectedIds.has(file.id));
   const someSelected = files.some((file) => selectedIds.has(file.id));
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-card">
+    <div className="overflow-hidden rounded-xl border bg-card shadow-soft">
       <Table>
         <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="w-10">
+          <TableRow className="border-b bg-muted/40 hover:bg-muted/40">
+            <TableHead className="w-10 pl-4">
               <Checkbox
                 checked={allSelected ? true : someSelected ? 'indeterminate' : false}
                 onCheckedChange={(checked) => onToggleSelectAll(checked === true)}
                 aria-label="Select all files"
               />
             </TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead className="hidden w-28 sm:table-cell">Size</TableHead>
-            <TableHead className="hidden w-36 md:table-cell">Modified</TableHead>
-            <TableHead className="w-12">
+            <TableHead className="h-10 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Name
+            </TableHead>
+            <TableHead className="hidden w-28 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:table-cell">
+              Size
+            </TableHead>
+            <TableHead className="hidden w-36 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground md:table-cell">
+              Modified
+            </TableHead>
+            <TableHead className="w-12 pr-4">
               <span className="sr-only">Actions</span>
             </TableHead>
           </TableRow>
@@ -82,32 +80,42 @@ export function FileList({
           {folders.map((folder) => (
             <TableRow
               key={`folder:${folder.path}`}
-              className="cursor-pointer"
+              className="group cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-muted/40"
               onClick={() => onOpenFolder(folder)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') onOpenFolder(folder);
+              }}
+              tabIndex={0}
             >
-              <TableCell />
+              <TableCell className="pl-4" />
               <TableCell>
-                <div className="flex min-w-0 items-center gap-2">
-                  <Folder className="h-5 w-5 shrink-0 fill-sky-500/15 text-sky-500" />
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Folder
+                      className="h-[18px] w-[18px] fill-primary/15"
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                    />
+                  </div>
                   <div className="min-w-0">
-                    <p className="truncate font-medium" title={folder.name}>
+                    <p className="truncate text-[13px] font-medium" title={folder.name}>
                       {folder.name}
                     </p>
                     {showPath ? (
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p className="truncate text-[11px] text-muted-foreground">
                         {folder.parent || '/'}
                       </p>
                     ) : null}
                   </div>
                 </div>
               </TableCell>
-              <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+              <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
                 —
               </TableCell>
-              <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                {formatDate(folder.date)}
+              <TableCell className="hidden text-xs tabular-nums text-muted-foreground md:table-cell">
+                {formatDateShort(folder.date)}
               </TableCell>
-              <TableCell onClick={(event) => event.stopPropagation()}>
+              <TableCell className="pr-4" onClick={(event) => event.stopPropagation()}>
                 <ItemMenu
                   target={{ type: 'folder', folder }}
                   onOpen={() => onOpenFolder(folder)}
@@ -125,13 +133,20 @@ export function FileList({
               <TableRow
                 key={`file:${file.id}`}
                 data-state={selected ? 'selected' : undefined}
-                className={cn('cursor-pointer', selected && 'bg-primary/5')}
+                tabIndex={0}
+                className={cn(
+                  'group cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-muted/40',
+                  selected && 'bg-primary/[0.06] hover:bg-primary/[0.08]'
+                )}
                 onClick={() => {
                   if (isMobile) onOpenFile(file);
                 }}
                 onDoubleClick={() => onOpenFile(file)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') onOpenFile(file);
+                }}
               >
-                <TableCell onClick={(event) => event.stopPropagation()}>
+                <TableCell className="pl-4" onClick={(event) => event.stopPropagation()}>
                   <Checkbox
                     checked={selected}
                     onCheckedChange={() => onToggleSelect(file)}
@@ -139,27 +154,29 @@ export function FileList({
                   />
                 </TableCell>
                 <TableCell>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <FileIcon kind={file.kind} className="h-5 w-5 shrink-0" />
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
+                      <FileIcon kind={file.kind} className="h-4 w-4" />
+                    </div>
                     <div className="min-w-0">
-                      <p className="truncate font-medium" title={file.name}>
+                      <p className="truncate text-[13px] font-medium" title={file.name}>
                         {file.name}
                       </p>
                       {showPath ? (
-                        <p className="truncate text-xs text-muted-foreground">
+                        <p className="truncate text-[11px] text-muted-foreground">
                           {file.folder || '/'}
                         </p>
                       ) : null}
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                <TableCell className="hidden text-xs tabular-nums text-muted-foreground sm:table-cell">
                   {humanSize(file.size)}
                 </TableCell>
-                <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                  {formatDate(file.date)}
+                <TableCell className="hidden text-xs tabular-nums text-muted-foreground md:table-cell">
+                  {formatDateShort(file.date)}
                 </TableCell>
-                <TableCell onClick={(event) => event.stopPropagation()}>
+                <TableCell className="pr-4" onClick={(event) => event.stopPropagation()}>
                   <ItemMenu
                     target={{ type: 'file', file }}
                     onDownload={() => onDownloadFile(file)}

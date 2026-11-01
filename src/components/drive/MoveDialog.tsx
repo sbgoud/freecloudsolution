@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Folder, FolderInput, Loader2 } from 'lucide-react';
+import { Check, Folder, FolderInput, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -88,6 +88,9 @@ export function MoveDialog({
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
+            <div className="mb-1 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary sm:mx-0">
+              <FolderInput className="h-5 w-5" />
+            </div>
             <DialogTitle>Move {itemType}</DialogTitle>
             <DialogDescription className="truncate">
               Choose a new location for “{itemName}”.
@@ -111,8 +114,8 @@ export function MoveDialog({
 
             <div className="space-y-2">
               <p className="text-sm font-medium">Pick a folder</p>
-              <ScrollArea className="h-56 rounded-md border">
-                <div className="p-1">
+              <ScrollArea className="h-56 rounded-lg border bg-muted/20">
+                <div className="space-y-0.5 p-1.5">
                   {destinationOptions.map((option) => {
                     const selected = normalizePath(destination) === option.path;
                     return (
@@ -124,21 +127,23 @@ export function MoveDialog({
                           if (error) setError(null);
                         }}
                         className={cn(
-                          'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors',
+                          'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors',
                           selected
-                            ? 'bg-primary/10 text-primary'
-                            : 'hover:bg-muted'
+                            ? 'bg-primary/10 font-medium text-primary'
+                            : 'text-foreground/80 hover:bg-muted hover:text-foreground'
                         )}
                         disabled={submitting}
+                        aria-pressed={selected}
                       >
                         {option.path === '/' ? (
-                          <FolderInput className="h-4 w-4 shrink-0 text-sky-500" />
+                          <FolderInput className="h-4 w-4 shrink-0" />
                         ) : (
-                          <Folder className="h-4 w-4 shrink-0 text-sky-500" />
+                          <Folder className="h-4 w-4 shrink-0" />
                         )}
                         <span className="min-w-0 flex-1 truncate">
                           {option.path === '/' ? 'My Drive' : option.path}
                         </span>
+                        {selected ? <Check className="h-4 w-4 shrink-0" /> : null}
                       </button>
                     );
                   })}
@@ -146,7 +151,11 @@ export function MoveDialog({
               </ScrollArea>
             </div>
 
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? (
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
           </div>
 
           <DialogFooter>

@@ -57,6 +57,7 @@ import {
   SheetDescription,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { Brand } from '@/components/brand';
 import { DriveTopBar } from '@/components/drive/DriveTopBar';
 import { DriveSidebar } from '@/components/drive/DriveSidebar';
 import { FileGrid } from '@/components/drive/FileGrid';
@@ -99,13 +100,13 @@ function errorMessage(error: unknown, fallback: string): string {
 
 function DriveSkeleton() {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5">
       {Array.from({ length: 10 }).map((_, index) => (
         <div key={index} className="overflow-hidden rounded-xl border bg-card">
           <Skeleton className="aspect-[4/3] w-full rounded-none" />
-          <div className="space-y-2 p-2.5">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-1/3" />
+          <div className="space-y-2 border-t px-3 py-2.5">
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-2.5 w-2/5" />
           </div>
         </div>
       ))}
@@ -733,8 +734,9 @@ const Drive = () => {
 
   if (status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-3 bg-background">
+        <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Opening your drive…</p>
       </div>
     );
   }
@@ -759,13 +761,14 @@ const Drive = () => {
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-[100dvh] flex-col bg-background">
       <DriveTopBar
         me={me}
         search={search}
         onSearchChange={setSearch}
         view={view}
         onViewChange={handleViewChange}
+        sidebarVisible={sidebarVisible}
         onToggleSidebar={() => setSidebarVisible((value) => !value)}
         onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
         onLogout={() => void handleLogout()}
@@ -774,142 +777,168 @@ const Drive = () => {
 
       <div className="flex flex-1">
         {sidebarVisible ? (
-          <aside className="hidden w-64 shrink-0 border-r bg-muted/20 md:block">
+          <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-72 shrink-0 border-r border-border/70 md:block">
             {sidebar}
           </aside>
         ) : null}
 
         <main
-          className="relative min-h-[calc(100vh-3.5rem)] min-w-0 flex-1"
+          className="relative min-h-[calc(100dvh-4rem)] min-w-0 flex-1"
+          aria-label="Drive contents"
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6">
+          <h1 className="sr-only">TG Drive files</h1>
+          <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
             <div className="flex items-center justify-between gap-3">
-              {searching ? (
-                <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-                  <Search className="h-4 w-4 shrink-0" />
-                  <span className="truncate">
-                    Search results for <span className="font-medium text-foreground">“{search.trim()}”</span>
-                  </span>
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs">
-                    {displayFiles.length + displayFolders.length}
-                  </span>
-                </div>
-              ) : (
-                <Breadcrumb className="min-w-0">
-                  <BreadcrumbList className="flex-nowrap">
-                    <BreadcrumbItem>
-                      {currentPath === '/' ? (
-                        <BreadcrumbPage className="flex items-center gap-1.5 font-medium">
-                          <Home className="h-4 w-4" />
-                          My Drive
-                        </BreadcrumbPage>
-                      ) : (
-                        <BreadcrumbLink asChild>
-                          <Link
-                            to="/drive"
-                            className="flex items-center gap-1.5 font-medium"
-                          >
-                            <Home className="h-4 w-4" />
-                            My Drive
-                          </Link>
-                        </BreadcrumbLink>
-                      )}
-                    </BreadcrumbItem>
-                    {breadcrumbs.map((crumb, index) => {
-                      const isLast = index === breadcrumbs.length - 1;
-                      return (
-                        <Fragment key={crumb.path}>
-                          <BreadcrumbSeparator>
-                            <ChevronRight className="h-4 w-4" />
-                          </BreadcrumbSeparator>
-                          <BreadcrumbItem className="min-w-0">
-                            {isLast ? (
-                              <BreadcrumbPage className="max-w-[12rem] truncate font-medium">
-                                {crumb.name}
-                              </BreadcrumbPage>
-                            ) : (
-                              <BreadcrumbLink asChild>
-                                <Link
-                                  to={folderUrl(crumb.path)}
-                                  className="max-w-[10rem] truncate"
-                                >
-                                  {crumb.name}
-                                </Link>
-                              </BreadcrumbLink>
-                            )}
-                          </BreadcrumbItem>
-                        </Fragment>
-                      );
-                    })}
-                  </BreadcrumbList>
-                </Breadcrumb>
-              )}
+              <div className="min-w-0">
+                {searching ? (
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Search className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        Results for “{search.trim()}”
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {displayFiles.length + displayFolders.length} matching
+                        {displayFiles.length + displayFolders.length === 1
+                          ? ' item'
+                          : ' items'}{' '}
+                        across every folder
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Breadcrumb className="min-w-0">
+                      <BreadcrumbList className="flex-nowrap gap-1.5 text-[13px] sm:gap-2">
+                        <BreadcrumbItem>
+                          {currentPath === '/' ? (
+                            <BreadcrumbPage className="flex items-center gap-1.5 rounded-md px-1.5 py-1 font-medium">
+                              <Home className="h-3.5 w-3.5" />
+                              My Drive
+                            </BreadcrumbPage>
+                          ) : (
+                            <BreadcrumbLink asChild>
+                              <Link
+                                to="/drive"
+                                className="flex items-center gap-1.5 rounded-md px-1.5 py-1 font-medium"
+                              >
+                                <Home className="h-3.5 w-3.5" />
+                                My Drive
+                              </Link>
+                            </BreadcrumbLink>
+                          )}
+                        </BreadcrumbItem>
+                        {breadcrumbs.map((crumb, index) => {
+                          const isLast = index === breadcrumbs.length - 1;
+                          return (
+                            <Fragment key={crumb.path}>
+                              <BreadcrumbSeparator>
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              </BreadcrumbSeparator>
+                              <BreadcrumbItem className="min-w-0">
+                                {isLast ? (
+                                  <BreadcrumbPage className="max-w-[12rem] truncate rounded-md px-1.5 py-1 font-medium">
+                                    {crumb.name}
+                                  </BreadcrumbPage>
+                                ) : (
+                                  <BreadcrumbLink asChild>
+                                    <Link
+                                      to={folderUrl(crumb.path)}
+                                      className="max-w-[10rem] truncate rounded-md px-1.5 py-1"
+                                    >
+                                      {crumb.name}
+                                    </Link>
+                                  </BreadcrumbLink>
+                                )}
+                              </BreadcrumbItem>
+                            </Fragment>
+                          );
+                        })}
+                      </BreadcrumbList>
+                    </Breadcrumb>
+                  </div>
+                )}
+              </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0"
-                onClick={() =>
-                  void load({ silent: files.length > 0 || markers.length > 0 })
-                }
-                disabled={loading || refreshing}
-              >
-                <RefreshCw
-                  className={`mr-0 h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`}
-                />
-                <span className="hidden sm:inline">Refresh</span>
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="hidden text-xs tabular-nums text-muted-foreground sm:inline">
+                  {displayFiles.length + displayFolders.length}
+                  {displayFiles.length + displayFolders.length === 1
+                    ? ' item'
+                    : ' items'}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 rounded-lg"
+                  onClick={() =>
+                    void load({ silent: files.length > 0 || markers.length > 0 })
+                  }
+                  disabled={loading || refreshing}
+                  aria-label="Refresh drive"
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`}
+                  />
+                  <span className="hidden sm:inline">Refresh</span>
+                </Button>
+              </div>
             </div>
 
-            {searching ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Searching every folder in your drive.
-              </p>
-            ) : null}
-
-            <div className="mt-4">
+            <div className="mt-5">
               {showSkeleton ? (
-                <div className="space-y-4">
-                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading… {loadedCount} items
+                <div className="space-y-4" aria-busy="true" aria-live="polite">
+                  <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Loading your files
+                    {loadedCount > 0 ? (
+                      <span className="rounded-full bg-muted px-2 py-0.5 tabular-nums">
+                        {loadedCount}
+                      </span>
+                    ) : null}
                   </p>
                   <DriveSkeleton />
                 </div>
               ) : showError ? (
-                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-muted/20 px-6 py-16 text-center">
-                  <AlertCircle className="mb-3 h-10 w-10 text-destructive" />
-                  <p className="text-base font-medium">Could not load your drive</p>
-                  <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-muted/20 px-6 py-16 text-center">
+                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-destructive/20 bg-destructive/10 text-destructive">
+                    <AlertCircle className="h-6 w-6" />
+                  </div>
+                  <p className="text-base font-semibold">Could not load your drive</p>
+                  <p className="mt-1 max-w-md text-sm leading-relaxed text-muted-foreground">
                     {error}
                   </p>
                   <Button
-                    className="mt-4"
+                    className="mt-5"
                     variant="outline"
                     onClick={() => void load()}
                   >
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    Retry
+                    Try again
                   </Button>
                 </div>
               ) : isEmpty ? (
-                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed bg-muted/20 px-6 py-16 text-center">
-                  <FolderOpen className="mb-3 h-12 w-12 text-muted-foreground/60" />
-                  <p className="text-base font-medium">
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-muted/20 px-6 py-16 text-center">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-card text-primary shadow-soft">
+                    <FolderOpen className="h-6 w-6" strokeWidth={1.75} />
+                  </div>
+                  <p className="text-base font-semibold">
                     {searching ? 'No matching items' : 'This folder is empty'}
                   </p>
-                  <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                  <p className="mt-1 max-w-sm text-sm leading-relaxed text-muted-foreground">
                     {searching
                       ? `Nothing matches “${search.trim()}”. Try a different search.`
-                      : 'This folder is empty — drop files here or click New to upload.'}
+                      : 'Drop files anywhere here, or create a folder to start organizing your drive.'}
                   </p>
                   {searching ? (
                     <Button
-                      className="mt-4"
+                      className="mt-5"
                       variant="outline"
                       onClick={() => setSearch('')}
                     >
@@ -917,7 +946,7 @@ const Drive = () => {
                       Clear search
                     </Button>
                   ) : (
-                    <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <div className="mt-5 flex flex-wrap justify-center gap-2">
                       <Button onClick={handleNewFolderAction}>
                         <FolderPlus className="mr-2 h-4 w-4" />
                         New folder
@@ -967,11 +996,18 @@ const Drive = () => {
           </div>
 
           {dragActive ? (
-            <div className="pointer-events-none absolute inset-3 z-20 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary bg-primary/5 backdrop-blur-sm">
-              <Upload className="mb-3 h-12 w-12 text-primary" />
-              <p className="text-lg font-semibold text-primary">Drop files to upload</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                They will be saved to {currentPath === '/' ? 'My Drive' : currentPath}
+            <div className="pointer-events-none absolute inset-3 z-20 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/70 bg-background/85 backdrop-blur-md">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Upload className="h-7 w-7" />
+              </div>
+              <p className="text-lg font-semibold text-foreground">
+                Drop files to upload
+              </p>
+              <p className="mt-1 max-w-sm px-4 text-center text-sm text-muted-foreground">
+                Saving to{' '}
+                <span className="font-medium text-foreground">
+                  {currentPath === '/' ? 'My Drive' : currentPath}
+                </span>
               </p>
             </div>
           ) : null}
@@ -979,12 +1015,15 @@ const Drive = () => {
       </div>
 
       <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-        <SheetContent side="left" className="w-72 p-0 pt-8 md:hidden">
+        <SheetContent side="left" className="w-[19rem] p-0 md:hidden">
           <SheetTitle className="sr-only">Folders</SheetTitle>
           <SheetDescription className="sr-only">
             Browse folders and create or upload items.
           </SheetDescription>
-          {sidebar}
+          <div className="flex h-16 items-center border-b px-4 pr-12">
+            <Brand markClassName="h-8 w-8" />
+          </div>
+          <div className="h-[calc(100%-4rem)]">{sidebar}</div>
         </SheetContent>
       </Sheet>
 
@@ -1011,8 +1050,16 @@ const Drive = () => {
       />
 
       {selectedFiles.length > 0 ? (
-        <div className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border bg-background px-3 py-1.5 shadow-xl">
-          <span className="mr-1 whitespace-nowrap px-1 text-sm font-medium">
+        <div
+          role="toolbar"
+          aria-label="Selected files actions"
+          className={`fixed left-1/2 z-40 max-w-[calc(100vw-1.5rem)] -translate-x-1/2 items-center gap-1 rounded-2xl border bg-card/95 px-2 py-1.5 shadow-pop backdrop-blur ${
+            uploads.length > 0
+              ? 'bottom-24 hidden sm:bottom-6 sm:flex'
+              : 'bottom-safe flex'
+          }`}
+        >
+          <span className="mr-1 whitespace-nowrap px-2 text-xs font-semibold tabular-nums sm:text-sm">
             {selectedFiles.length} selected
           </span>
           <Button
@@ -1020,6 +1067,7 @@ const Drive = () => {
             size="sm"
             className="h-8"
             onClick={() => void downloadSelected()}
+            aria-label="Download selected files"
           >
             <Download className="mr-1.5 h-4 w-4" />
             <span className="hidden sm:inline">Download</span>
@@ -1029,6 +1077,7 @@ const Drive = () => {
             size="sm"
             className="h-8"
             onClick={() => setBulkMoveOpen(true)}
+            aria-label="Move selected files"
           >
             <Move className="mr-1.5 h-4 w-4" />
             <span className="hidden sm:inline">Move</span>
@@ -1038,6 +1087,7 @@ const Drive = () => {
             size="sm"
             className="h-8 text-destructive hover:text-destructive"
             onClick={() => setBulkDeleteOpen(true)}
+            aria-label="Delete selected files"
           >
             <Trash2 className="mr-1.5 h-4 w-4" />
             <span className="hidden sm:inline">Delete</span>

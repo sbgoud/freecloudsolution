@@ -39,10 +39,11 @@ export function ItemMenu({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0"
-          aria-label="Item actions"
+          className="h-8 w-8 shrink-0 rounded-lg border border-transparent text-muted-foreground hover:border-border hover:bg-background/90 hover:text-foreground data-[state=open]:border-border data-[state=open]:bg-background/90"
+          aria-label={`Actions for ${target.type === 'file' ? target.file.name : target.folder.name}`}
           onClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
         >
           <MoreHorizontal className="h-4 w-4" />
         </Button>
@@ -74,7 +75,7 @@ export function ItemMenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={onDelete}
-          className="text-destructive focus:text-destructive"
+          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
         >
           <Trash2 className="mr-2 h-4 w-4" />
           Delete

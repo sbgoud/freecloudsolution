@@ -1,5 +1,4 @@
 import { defineConfig } from "vite";
-import dyadComponentTagger from "@dyad-sh/react-vite-component-tagger";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import fs from "fs";
@@ -80,7 +79,6 @@ export default defineConfig(() => ({
   },
   plugins: [
     gramjsBrowserCrypto(),
-    dyadComponentTagger(),
     react(),
     nodePolyfills({
       // To exclude specific polyfills, add them to this list.

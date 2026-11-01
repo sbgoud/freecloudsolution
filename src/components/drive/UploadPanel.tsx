@@ -1,4 +1,10 @@
-import { CheckCircle2, Loader2, X, XCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  CloudUpload,
+  Loader2,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { detectKind } from '@/lib/telegram/files';
@@ -53,17 +59,20 @@ export function UploadPanel({ tasks, onCancel, onClose }: UploadPanelProps) {
     : 0;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[calc(100vw-2rem)] max-w-sm overflow-hidden rounded-xl border bg-background shadow-2xl">
-      <div className="flex items-center gap-2 border-b px-4 py-3">
+    <div className="fixed inset-x-3 bottom-safe z-50 overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-pop sm:inset-x-auto sm:right-6 sm:w-[380px]">
+      <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <CloudUpload className="h-4 w-4" />
+        </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">
             {active
               ? `Uploading ${Math.min(settled + 1, total)} of ${total}`
               : `Uploaded ${done} of ${total} items`}
           </p>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate text-[11px] text-muted-foreground">
             {active
-              ? 'Uploads to your Saved Messages'
+              ? `Saving to your Telegram Saved Messages · ${overall}%`
               : failed > 0
                 ? `${failed} failed${cancelled ? `, ${cancelled} cancelled` : ''}`
                 : cancelled > 0
@@ -73,9 +82,9 @@ export function UploadPanel({ tasks, onCancel, onClose }: UploadPanelProps) {
         </div>
         {active ? (
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="h-8 gap-1 text-xs"
+            className="h-8 shrink-0 gap-1.5 text-xs"
             onClick={onCancel}
           >
             <X className="h-3.5 w-3.5" />
@@ -85,7 +94,7 @@ export function UploadPanel({ tasks, onCancel, onClose }: UploadPanelProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8"
+            className="h-8 w-8 shrink-0"
             onClick={onClose}
             aria-label="Close upload panel"
           >
@@ -98,13 +107,18 @@ export function UploadPanel({ tasks, onCancel, onClose }: UploadPanelProps) {
         <Progress value={overall} className="h-1.5" />
       </div>
 
-      <div className="max-h-64 space-y-2 overflow-y-auto px-4 py-3">
+      <div className="max-h-64 space-y-1 overflow-y-auto p-2 pb-3">
         {tasks.map((task) => (
-          <div key={task.id} className="flex items-start gap-2">
-            <FileIcon
-              kind={detectKind(task.file.type, task.file.name)}
-              className="mt-0.5 h-4 w-4 shrink-0"
-            />
+          <div
+            key={task.id}
+            className="flex items-start gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/50"
+          >
+            <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-muted/40">
+              <FileIcon
+                kind={detectKind(task.file.type, task.file.name)}
+                className="h-3.5 w-3.5"
+              />
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p
@@ -115,9 +129,10 @@ export function UploadPanel({ tasks, onCancel, onClose }: UploadPanelProps) {
                 </p>
                 <span
                   className={cn(
-                    'flex shrink-0 items-center gap-1 text-[11px]',
+                    'flex shrink-0 items-center gap-1 text-[11px] tabular-nums',
                     task.status === 'error' && 'text-destructive',
-                    task.status === 'done' && 'text-emerald-600',
+                    task.status === 'done' &&
+                      'text-emerald-600 dark:text-emerald-400',
                     task.status === 'cancelled' && 'text-muted-foreground',
                     (task.status === 'queued' || task.status === 'uploading') &&
                       'text-muted-foreground'
@@ -134,10 +149,10 @@ export function UploadPanel({ tasks, onCancel, onClose }: UploadPanelProps) {
                 </span>
               </div>
               {task.status === 'uploading' ? (
-                <Progress value={task.progress * 100} className="mt-1 h-1" />
+                <Progress value={task.progress * 100} className="mt-1.5 h-1" />
               ) : null}
               {task.status === 'error' && task.error ? (
-                <p className="mt-0.5 truncate text-[11px] text-destructive">
+                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-destructive">
                   {task.error}
                 </p>
               ) : null}

@@ -1,0 +1,26 @@
+{
+  "name": "TG Drive — Private cloud drive on Telegram",
+  "short_name": "TG Drive",
+  "description": "Turn your Telegram Saved Messages into a private, Google Drive-like file store.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f7f7f9",
+  "theme_color": "#1d4ed8",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

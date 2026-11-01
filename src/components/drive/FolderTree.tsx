@@ -30,49 +30,67 @@ function TreeRow({
   const isOpen = expanded.has(node.path);
   const isActive = currentPath === node.path;
   const hasChildren = node.children.length > 0;
+  const isRoot = node.path === '/';
 
   return (
     <div>
       <div
         className={cn(
-          'group flex items-center gap-0.5 rounded-md pr-1 transition-colors',
-          isActive ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+          'group relative flex items-center gap-0.5 rounded-lg pr-1.5 transition-colors duration-150',
+          isActive
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+            : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground'
         )}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
       >
+        {isActive ? (
+          <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />
+        ) : null}
         <button
           type="button"
           className={cn(
-            'flex h-7 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-transform hover:text-foreground',
+            'flex h-8 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground',
             !hasChildren && 'invisible'
           )}
+          style={{ marginLeft: `${depth * 12 + 2}px` }}
           onClick={() => onToggle(node.path)}
-          aria-label={isOpen ? 'Collapse folder' : 'Expand folder'}
+          aria-label={
+            isOpen
+              ? `Collapse ${node.name}`
+              : `Expand ${node.name}`
+          }
           aria-expanded={isOpen}
           tabIndex={hasChildren ? 0 : -1}
         >
           <ChevronRight
-            className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-90')}
+            className={cn(
+              'h-3.5 w-3.5 transition-transform duration-150',
+              isOpen && 'rotate-90'
+            )}
           />
         </button>
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left text-sm"
+          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left text-[13px] font-medium"
           onClick={() => onNavigate(node.path)}
           title={node.path}
+          aria-current={isActive ? 'page' : undefined}
         >
           {isOpen && hasChildren ? (
             <FolderOpen
               className={cn(
                 'h-4 w-4 shrink-0',
-                isActive ? 'text-primary' : 'text-sky-500'
+                isActive ? 'text-primary' : 'text-muted-foreground'
               )}
             />
           ) : (
             <Folder
               className={cn(
                 'h-4 w-4 shrink-0',
-                isActive ? 'text-primary' : 'text-sky-500'
+                isActive
+                  ? 'text-primary'
+                  : isRoot
+                    ? 'fill-primary/10 text-primary/80'
+                    : 'text-muted-foreground'
               )}
             />
           )}
@@ -81,7 +99,7 @@ function TreeRow({
       </div>
 
       {hasChildren && isOpen ? (
-        <div>
+        <div className="relative">
           {node.children.map((child) => (
             <TreeRow
               key={child.path}

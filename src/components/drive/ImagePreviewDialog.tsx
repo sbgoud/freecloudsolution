@@ -79,7 +79,7 @@ export function ImagePreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden">
+      <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden p-4 sm:p-6">
         <DialogHeader className="pr-8">
           <DialogTitle className="truncate">{file?.name ?? 'Preview'}</DialogTitle>
           <DialogDescription>
@@ -87,7 +87,7 @@ export function ImagePreviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-h-[16rem] items-center justify-center overflow-hidden rounded-lg bg-muted/40">
+        <div className="relative flex min-h-[16rem] items-center justify-center overflow-hidden rounded-xl border bg-[linear-gradient(45deg,hsl(var(--muted))_25%,transparent_25%,transparent_75%,hsl(var(--muted))_75%,hsl(var(--muted))),linear-gradient(45deg,hsl(var(--muted))_25%,transparent_25%,transparent_75%,hsl(var(--muted))_75%,hsl(var(--muted)))] bg-[length:20px_20px] bg-[position:0_0,10px_10px]">
           {loading ? (
             <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin" />
@@ -114,7 +114,7 @@ export function ImagePreviewDialog({
           ) : null}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="border-t pt-4">
           <Button
             variant="outline"
             onClick={() => {

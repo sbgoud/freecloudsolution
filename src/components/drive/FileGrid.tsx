@@ -5,6 +5,7 @@ import { humanSize, type DriveFile } from '@/lib/telegram/files';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { DriveThumbnail } from './DriveThumbnail';
+import { formatDateShort } from './format';
 import { ItemMenu } from './ItemMenu';
 import type { FolderEntry, ItemTarget } from './types';
 
@@ -40,13 +41,13 @@ export function FileGrid({
   const isMobile = useIsMobile();
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-5">
       {folders.map((folder) => (
         <div
           key={`folder:${folder.path}`}
           role="button"
           tabIndex={0}
-          className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card text-left shadow-sm transition hover:border-primary/40 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-[transform,border-color,box-shadow] duration-200 ease-smooth hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-lift focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0"
           onClick={() => onOpenFolder(folder)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -54,10 +55,20 @@ export function FileGrid({
               onOpenFolder(folder);
             }
           }}
+          aria-label={`Open folder ${folder.name}`}
         >
-          <div className="relative flex aspect-[4/3] items-center justify-center bg-muted/40">
-            <Folder className="h-12 w-12 fill-sky-500/15 text-sky-500" />
-            <div className="absolute right-1.5 top-1.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+          <div className="relative flex aspect-[4/3] items-center justify-center bg-[radial-gradient(circle_at_50%_35%,hsl(var(--primary)/0.10),transparent_68%)]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/10 bg-card/80 text-primary shadow-sm backdrop-blur-sm transition-transform duration-200 ease-smooth group-hover:scale-105">
+              <Folder
+                className="h-7 w-7 fill-primary/15"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            </div>
+            <div
+              className="absolute right-1.5 top-1.5 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+              onClick={(event) => event.stopPropagation()}
+            >
               <ItemMenu
                 target={{ type: 'folder', folder }}
                 onOpen={() => onOpenFolder(folder)}
@@ -67,12 +78,12 @@ export function FileGrid({
               />
             </div>
           </div>
-          <div className="min-w-0 p-2.5">
-            <p className="truncate text-sm font-medium" title={folder.name}>
+          <div className="min-w-0 border-t bg-card px-3 py-2.5">
+            <p className="truncate text-[13px] font-medium" title={folder.name}>
               {folder.name}
             </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {showPath ? folder.parent || '/' : 'Folder'}
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              {showPath ? folder.parent || '/' : formatDateShort(folder.date)}
             </p>
           </div>
         </div>
@@ -86,8 +97,9 @@ export function FileGrid({
             role="button"
             tabIndex={0}
             className={cn(
-              'group flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card text-left shadow-sm transition hover:border-primary/40 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              selected && 'border-primary ring-2 ring-primary/30'
+              'group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-[transform,border-color,box-shadow] duration-200 ease-smooth hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-lift focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:translate-y-0',
+              selected &&
+                'border-primary/60 shadow-[0_0_0_1px_hsl(var(--primary)/0.5)]'
             )}
             onClick={() => {
               if (isMobile) onOpenFile(file);
@@ -99,27 +111,29 @@ export function FileGrid({
                 onOpenFile(file);
               }
             }}
+            aria-label={`${file.name}${selected ? ', selected' : ''}`}
           >
-            <div className="relative aspect-[4/3]">
+            <div className="relative aspect-[4/3] overflow-hidden">
               <DriveThumbnail client={client} file={file} />
               <div
                 className={cn(
-                  'absolute left-2 top-2 transition-opacity',
+                  'absolute left-2 top-2 z-10 transition-opacity duration-150',
                   selected
                     ? 'opacity-100'
-                    : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100'
+                    : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100'
                 )}
                 onClick={(event) => event.stopPropagation()}
               >
-                <Checkbox
-                  checked={selected}
-                  onCheckedChange={() => onToggleSelect(file)}
-                  aria-label={`Select ${file.name}`}
-                  className="border-white/80 bg-background/80 shadow-sm"
-                />
+                <span className="flex h-6 w-6 items-center justify-center rounded-md bg-background/90 shadow-sm backdrop-blur">
+                  <Checkbox
+                    checked={selected}
+                    onCheckedChange={() => onToggleSelect(file)}
+                    aria-label={`Select ${file.name}`}
+                  />
+                </span>
               </div>
               <div
-                className="absolute right-1.5 top-1.5 opacity-100 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100 sm:focus-within:opacity-100"
+                className="absolute right-1.5 top-1.5 z-10 opacity-100 transition-opacity duration-150 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                 onClick={(event) => event.stopPropagation()}
               >
                 <ItemMenu
@@ -131,12 +145,14 @@ export function FileGrid({
                 />
               </div>
             </div>
-            <div className="min-w-0 p-2.5">
-              <p className="truncate text-sm font-medium" title={file.name}>
+            <div className="min-w-0 border-t bg-card px-3 py-2.5">
+              <p className="truncate text-[13px] font-medium" title={file.name}>
                 {file.name}
               </p>
-              <p className="truncate text-xs text-muted-foreground">
-                {showPath ? file.folder || '/' : humanSize(file.size)}
+              <p className="mt-0.5 truncate text-[11px] tabular-nums text-muted-foreground">
+                {showPath
+                  ? file.folder || '/'
+                  : `${humanSize(file.size)} · ${formatDateShort(file.date)}`}
               </p>
             </div>
           </div>
