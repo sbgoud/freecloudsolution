@@ -1,4 +1,5 @@
 import { Api, TelegramClient } from 'telegram';
+import { sendBlobAsDocument } from './upload';
 import {
   basename,
   buildFileCaption,
@@ -433,14 +434,13 @@ export async function uploadFiles(
       opts.onFileProgress?.(index, fraction);
     };
 
-    const message = await client.sendFile('me', {
-      file: item.file,
-      caption: buildFileCaption(item.path),
-      forceDocument: true,
-      workers,
-      progressCallback,
-      parseMode: false,
-    });
+    const message = await sendBlobAsDocument(
+      client,
+      item.file,
+      basename(item.path) || item.file.name,
+      buildFileCaption(item.path),
+      { workers, signal: opts.signal, onProgress: progressCallback }
+    );
 
     messages.push(message);
   }
