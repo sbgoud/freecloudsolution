@@ -1,31 +1,19 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { useTelegram } from '@/context/TelegramContext';
-import { MadeWithDyad } from '@/components/made-with-dyad';
 
 const Index = () => {
-  const navigate = useNavigate();
   const { status } = useTelegram();
 
-  useEffect(() => {
-    if (status === 'loggedIn') {
-      navigate('/home');
-    } else if (status === 'loggedOut') {
-      navigate('/login');
-    }
-  }, [status, navigate]);
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Telegram Web Client</h1>
-        <p className="text-xl text-gray-600">
-          Securely access your Telegram messages from anywhere
-        </p>
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
-      <MadeWithDyad />
-    </div>
-  );
+    );
+  }
+
+  return <Navigate to={status === 'loggedIn' ? '/drive' : '/login'} replace />;
 };
 
 export default Index;

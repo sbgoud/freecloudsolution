@@ -6,7 +6,7 @@ import { API_HASH, API_ID } from './config';
 
 export interface QrLoginOptions {
   onQr: (url: string, expires: number) => void;
-  onPasswordNeeded: (hint?: string) => Promise<string>;
+  onPasswordNeeded: (hint?: string, error?: unknown) => Promise<string>;
   signal?: AbortSignal;
 }
 
@@ -23,6 +23,13 @@ function errorMessageOf(error: unknown): string {
 
 function isPasswordNeeded(error: unknown): boolean {
   return errorMessageOf(error) === 'SESSION_PASSWORD_NEEDED';
+}
+
+function isPasswordInvalid(error: unknown): boolean {
+  const message = errorMessageOf(error);
+  return (
+    message === 'PASSWORD_HASH_INVALID' || message === 'PASSWORD_EMPTY'
+  );
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -119,6 +126,8 @@ export async function startQrLogin(
       reject(new Error('Login cancelled'));
     }
   });
+  // Avoid an unhandled rejection when the signal fires while we are not racing.
+  void abortPromise.catch(() => undefined);
 
   const handleAbort = () => rejectAbort?.(new Error('Login cancelled'));
   signal?.addEventListener('abort', handleAbort, { once: true });
@@ -151,7 +160,7 @@ export async function startQrLogin(
       }
 
       if (result instanceof Api.auth.LoginToken) {
-        const url = `tg://login?token=${result.token.toString('base64url')}`;
+        const url = `tg://login?token=${result.token.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
         onQr(url, result.expires);
 
         const remaining = result.expires * 1000 - Date.now();
@@ -180,8 +189,27 @@ export async function startQrLogin(
   } catch (error) {
     if (isPasswordNeeded(error)) {
       const hint = await getPasswordHint(client).catch(() => undefined);
-      const password = await onPasswordNeeded(hint);
-      return signInWithPassword(client, password);
+      let passwordError: unknown;
+
+      while (true) {
+        if (signal?.aborted) throw new Error('Login cancelled');
+
+        const password = await Promise.race([
+          onPasswordNeeded(hint, passwordError),
+          abortPromise,
+        ]);
+
+        if (signal?.aborted) throw new Error('Login cancelled');
+
+        try {
+          return await signInWithPassword(client, password);
+        } catch (nextPasswordError) {
+          if (!isPasswordInvalid(nextPasswordError)) {
+            throw nextPasswordError;
+          }
+          passwordError = nextPasswordError;
+        }
+      }
     }
     throw error;
   } finally {
