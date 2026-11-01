@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '@/context/TelegramContext';
+import {
+  friendlyError,
+  sendCode,
+  signInWithCode,
+  signInWithPassword,
+} from '@/lib/telegram/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,58 +29,67 @@ const Login = () => {
   const navigate = useNavigate();
   const [countryCode, setCountryCode] = useState('+91');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [phone, setPhone] = useState('');
+  const [phoneCodeHash, setPhoneCodeHash] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { 
-    isLoggedIn, 
-    login, 
-    sendCode, 
-    sendPassword, 
-    isTwoFactorRequired 
-  } = useTelegram();
+  const [isTwoFactorRequired, setIsTwoFactorRequired] = useState(false);
+  const [error, setError] = useState('');
+  const { client, status, completeLogin } = useTelegram();
 
-  // Redirect to home if already logged in
   useEffect(() => {
-    if (isLoggedIn) {
+    if (status === 'loggedIn') {
       navigate('/home');
     }
-  }, [isLoggedIn, navigate]);
+  }, [status, navigate]);
 
   const handleSendCode = async () => {
+    if (!client) return;
     const fullPhone = `${countryCode}${phoneNumber}`;
     if (!fullPhone) return;
     setIsLoading(true);
+    setError('');
     try {
-      await login(fullPhone);
+      const result = await sendCode(client, fullPhone);
+      setPhone(fullPhone);
+      setPhoneCodeHash(result.phoneCodeHash);
       setIsCodeSent(true);
-    } catch (error) {
-      console.error('Failed to send code', error);
+    } catch (err) {
+      setError(friendlyError(err));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleVerifyCode = async () => {
-    if (!code) return;
+    if (!client || !code || !phone || !phoneCodeHash) return;
     setIsLoading(true);
+    setError('');
     try {
-      await sendCode(code);
-    } catch (error) {
-      console.error('Failed to verify code', error);
+      const result = await signInWithCode(client, phone, phoneCodeHash, code);
+      if (result === 'password_needed') {
+        setIsTwoFactorRequired(true);
+      } else {
+        await completeLogin();
+      }
+    } catch (err) {
+      setError(friendlyError(err));
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleSendPassword = async () => {
-    if (!password) return;
+    if (!client || !password) return;
     setIsLoading(true);
+    setError('');
     try {
-      await sendPassword(password);
-    } catch (error) {
-      console.error('Failed to verify password', error);
+      await signInWithPassword(client, password);
+      await completeLogin();
+    } catch (err) {
+      setError(friendlyError(err));
     } finally {
       setIsLoading(false);
     }
@@ -180,6 +195,10 @@ const Login = () => {
               {isLoading ? 'Verifying...' : 'Verify Code'}
             </Button>
           </div>
+        )}
+
+        {error && (
+          <p className="mt-4 text-sm text-red-600 text-center">{error}</p>
         )}
         
         <div className="mt-6 text-center text-sm text-gray-500">

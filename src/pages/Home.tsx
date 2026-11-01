@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTelegram } from '@/context/TelegramContext';
+import { humanSize, listAll, uploadFiles, DriveFile } from '@/lib/telegram/files';
+import { joinPath } from '@/lib/telegram/meta';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -9,23 +11,24 @@ import { useToast } from '@/hooks/use-toast';
 
 const Home = () => {
   const navigate = useNavigate();
-  const { isLoggedIn, fetchMessages, logout, uploadFile, uploadMultipleFiles } = useTelegram();
-  const [messages, setMessages] = useState<any[]>([]);
+  const { client, status, logout } = useTelegram();
+  const [files, setFiles] = useState<DriveFile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const isLoggedIn = status === 'loggedIn';
 
-  // Redirect to login if not logged in
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (status === 'loggedOut') {
       navigate('/login');
     }
-  }, [isLoggedIn, navigate]);
+  }, [status, navigate]);
 
   const loadMessages = async () => {
+    if (!client) return;
     setIsLoading(true);
     try {
-      const msgs = await fetchMessages();
-      setMessages(msgs);
+      const result = await listAll(client);
+      setFiles(result.files);
     } catch (error) {
       console.error('Failed to load messages', error);
     } finally {
@@ -34,49 +37,51 @@ const Home = () => {
   };
 
   const handleLogout = () => {
-    logout();
-    navigate('/login');
+    void logout().then(() => navigate('/login'));
   };
 
   useEffect(() => {
-    if (isLoggedIn) {
+    if (isLoggedIn && client) {
       loadMessages();
     }
-  }, [isLoggedIn]);
+  }, [isLoggedIn, client]);
 
-  const handleFileSelect = (files: File[]) => {
-    console.log('Files selected:', files.map(f => f.name));
+  const handleFileSelect = (selected: File[]) => {
+    console.log('Files selected:', selected.map(f => f.name));
   };
 
-  const handleFileUpload = async (files: File[]) => {
+  const handleFileUpload = async (selected: File[]) => {
+    if (!client) {
+      throw new Error('Telegram client is not ready');
+    }
+
     try {
-      if (files.length === 1) {
-        // Single file upload with progress
-        await uploadFile(files[0], (progress) => {
-          console.log(`Upload progress: ${progress}%`);
-        });
-        toast({
-          title: "File uploaded successfully!",
-          description: `${files[0].name} has been saved to your Telegram messages.`,
-        });
-      } else {
-        // Multiple files upload with progress
-        await uploadMultipleFiles(files, (fileIndex, progress) => {
-          console.log(`File ${fileIndex + 1} progress: ${progress}%`);
-        });
-        toast({
-          title: "Files uploaded successfully!",
-          description: `${files.length} files have been saved to your Telegram messages.`,
-        });
-      }
-      // Refresh messages to show the newly uploaded files
+      const items = selected.map((file) => ({
+        file,
+        path: joinPath('/Unsorted', file.name),
+      }));
+
+      await uploadFiles(client, items, {
+        onFileProgress: (fileIndex, fraction) => {
+          console.log(`File ${fileIndex + 1} progress: ${Math.round(fraction * 100)}%`);
+        },
+      });
+
+      toast({
+        title: 'Files uploaded successfully!',
+        description: `${selected.length} file${selected.length === 1 ? '' : 's'} have been saved to your Telegram messages.`,
+      });
+
       await loadMessages();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload error:', error);
       toast({
-        title: "Upload failed",
-        description: error.message || "There was an error uploading your files. Please try again.",
-        variant: "destructive",
+        title: 'Upload failed',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'There was an error uploading your files. Please try again.',
+        variant: 'destructive',
       });
       throw error;
     }
@@ -84,9 +89,9 @@ const Home = () => {
 
   const handleFileError = (error: string) => {
     toast({
-      title: "File validation error",
+      title: 'File validation error',
       description: error,
-      variant: "destructive",
+      variant: 'destructive',
     });
   };
 
@@ -116,21 +121,22 @@ const Home = () => {
               </Card>
             ))}
           </div>
-        ) : messages.length > 0 ? (
+        ) : files.length > 0 ? (
           <div className="space-y-4">
-            {messages.map((msg) => (
-              <Card key={msg.id}>
+            {files.map((file) => (
+              <Card key={file.id}>
                 <CardHeader>
-                  <CardTitle>Message {msg.id}</CardTitle>
+                  <CardTitle>{file.name}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p>{msg.message}</p>
+                  <p className="text-sm text-gray-600">{file.path}</p>
+                  <p className="text-sm text-gray-500">{humanSize(file.size)}</p>
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : (
-          <p>No messages found.</p>
+          <p>No files found.</p>
         )}
 
         {/* File Upload Section */}
@@ -140,8 +146,8 @@ const Home = () => {
             onFileSelect={handleFileSelect}
             onUpload={handleFileUpload}
             onError={handleFileError}
-            maxSizeInMB={2048} // 2GB = 2048MB
-            acceptedTypes={[]} // Allow all file types
+            maxSizeInMB={4096}
+            acceptedTypes={[]}
           />
         </div>
       </div>

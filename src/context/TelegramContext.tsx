@@ -1,23 +1,38 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { TelegramClient } from 'telegram';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react';
+import { Api, TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
-import { Api } from 'telegram';
+import {
+  API_HASH,
+  API_ID,
+  clearStoredSession,
+  loadStoredSession,
+  SESSION_KEY,
+} from '@/lib/telegram/config';
 
-// Hardcoded credentials (user will change manually later)
-const API_ID = 20134869;
-const API_HASH = 'b702f181f4de5e6fe4848b632d62e5b3';
+export type TelegramStatus = 'loading' | 'loggedOut' | 'loggedIn';
+
+export interface TelegramMe {
+  id: number;
+  firstName: string;
+  username?: string;
+  premium: boolean;
+}
 
 interface TelegramContextType {
   client: TelegramClient | null;
-  isLoggedIn: boolean;
-  login: (phone: string) => Promise<void>;
-  sendCode: (code: string) => Promise<void>;
-  sendPassword: (password: string) => Promise<void>;
-  logout: () => void;
-  fetchMessages: () => Promise<any[]>;
-  uploadFile: (file: File, onProgress?: (progress: number) => void) => Promise<void>;
-  uploadMultipleFiles: (files: File[], onProgress?: (fileIndex: number, progress: number) => void) => Promise<void>;
-  isTwoFactorRequired: boolean;
+  status: TelegramStatus;
+  me: TelegramMe | null;
+  saveSession: () => void;
+  completeLogin: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const TelegramContext = createContext<TelegramContextType | null>(null);
@@ -30,430 +45,155 @@ export const useTelegram = () => {
   return context;
 };
 
+function createClient(sessionString = ''): TelegramClient {
+  return new TelegramClient(
+    new StringSession(sessionString),
+    API_ID,
+    API_HASH,
+    {
+      connectionRetries: 5,
+      useWSS: true,
+    }
+  );
+}
+
+function toMe(user: Api.User): TelegramMe {
+  return {
+    id: Number(user.id),
+    firstName: user.firstName || '',
+    username: user.username,
+    premium: Boolean(user.premium),
+  };
+}
+
+function persistSession(client: TelegramClient): void {
+  const session = client.session.save() as unknown;
+  if (typeof session === 'string' && session.length > 0) {
+    localStorage.setItem(SESSION_KEY, session);
+  }
+}
+
+function isExpiredSessionError(error: unknown): boolean {
+  const value = error as { errorMessage?: string; message?: string };
+  const message = value?.errorMessage || value?.message || '';
+  return (
+    message.includes('AUTH_KEY_UNREGISTERED') ||
+    message.includes('AUTH_TOKEN_EXPIRED') ||
+    message.includes('SESSION_REVOKED') ||
+    message.includes('USER_DEACTIVATED')
+  );
+}
+
 export const TelegramProvider = ({ children }: { children: ReactNode }) => {
+  const clientRef = useRef<TelegramClient | null>(null);
   const [client, setClient] = useState<TelegramClient | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [phone, setPhone] = useState('');
-  const [phoneCodeHash, setPhoneCodeHash] = useState('');
-  const [isTwoFactorRequired, setIsTwoFactorRequired] = useState(false);
+  const [status, setStatus] = useState<TelegramStatus>('loading');
+  const [me, setMe] = useState<TelegramMe | null>(null);
 
   useEffect(() => {
-    const initializeClient = async () => {
+    let cancelled = false;
+
+    const initialize = async () => {
+      const sessionString = loadStoredSession();
+      const current = createClient(sessionString);
+      clientRef.current = current;
+
+      if (!cancelled) setClient(current);
+
+      if (!sessionString) {
+        if (!cancelled) setStatus('loggedOut');
+        return;
+      }
+
       try {
-        const sessionString = localStorage.getItem('session') || '';
-        const session = new StringSession(sessionString);
-        const newClient = new TelegramClient(
-          session,
-          API_ID,
-          API_HASH,
-          { connectionRetries: 5 }
-        );
-        
-        setClient(newClient);
-        
-        // Only try to restore session if we have a valid session string
-        if (sessionString && sessionString.length > 0) {
-          try {
-            await newClient.connect();
-            // Verify the session is still valid by trying to get account info
-            await newClient.invoke(new Api.users.GetFullUser({
-              id: new Api.InputUserSelf()
-            }));
-            setIsLoggedIn(true);
-          } catch (e) {
-            console.error('Session restore failed, clearing invalid session:', e.message || e);
-            localStorage.removeItem('session');
-            setIsLoggedIn(false);
-            if (newClient.connected) {
-              await newClient.disconnect();
-            }
-          }
-        } else {
-          setIsLoggedIn(false);
+        await current.connect();
+        const user = await current.getMe();
+
+        if (!cancelled) {
+          setMe(toMe(user));
+          setStatus('loggedIn');
         }
       } catch (error) {
-        console.error('Failed to initialize client:', error);
-        setIsLoggedIn(false);
+        if (isExpiredSessionError(error)) {
+          clearStoredSession();
+          try {
+            if (current.connected) await current.disconnect();
+          } catch {
+            // ignore
+          }
+
+          const fresh = createClient('');
+          clientRef.current = fresh;
+          if (!cancelled) setClient(fresh);
+        }
+
+        if (!cancelled) {
+          setMe(null);
+          setStatus('loggedOut');
+        }
       }
     };
 
-    initializeClient();
+    initialize();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const login = async (phoneNumber: string) => {
-    if (!client) return;
-    setPhone(phoneNumber);
-    
-    try {
-      // Ensure client is connected before sending code
-      if (!client.connected) {
-        await client.connect();
-      }
-      
-      const result = await client.invoke(
-        new Api.auth.SendCode({
-          phoneNumber,
-          apiId: API_ID,
-          apiHash: API_HASH,
-          settings: new Api.CodeSettings({})
-        })
-      );
-      
-      setPhoneCodeHash(result.phoneCodeHash);
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
-  };
+  const saveSession = useCallback(() => {
+    const current = clientRef.current;
+    if (!current) return;
+    persistSession(current);
+  }, []);
 
-  const sendCode = async (code: string) => {
-    if (!client || !phone || !phoneCodeHash) return;
-    
-    try {
-      // Ensure client is connected before signing in
-      if (!client.connected) {
-        await client.connect();
-      }
-      
-      await client.invoke(
-        new Api.auth.SignIn({
-          phoneNumber: phone,
-          phoneCodeHash,
-          phoneCode: code
-        })
-      );
-      
-      localStorage.setItem('session', client.session.save() as string);
-      setIsLoggedIn(true);
-      setIsTwoFactorRequired(false);
-    } catch (error: any) {
-      if (error.errorMessage === 'SESSION_PASSWORD_NEEDED') {
-        setIsTwoFactorRequired(true);
-      } else {
-        console.error('Code verification error:', error);
-        throw error;
-      }
+  const completeLogin = useCallback(async () => {
+    const current = clientRef.current;
+    if (!current) {
+      throw new Error('Telegram client is not ready');
     }
-  };
 
-  const sendPassword = async (password: string) => {
-    if (!client) return;
-    
-    try {
-      // Ensure client is connected before sending password
-      if (!client.connected) {
-        await client.connect();
-      }
-      
-      // Get password configuration
-      const passwordConfig = await client.invoke(
-        new Api.account.GetPassword()
-      );
-      
-      // Try a different approach - check if we can access the method differently
-      let checkPassword;
-      
-      // First try the direct method
+    if (!current.connected) {
+      await current.connect();
+    }
+
+    persistSession(current);
+    const user = await current.getMe();
+    setMe(toMe(user));
+    setStatus('loggedIn');
+  }, []);
+
+  const logout = useCallback(async () => {
+    const current = clientRef.current;
+
+    if (current) {
       try {
-        checkPassword = await (client as any).computeCheckPassword(passwordConfig, password);
-      } catch (e) {
-        // If that fails, try importing it
-        try {
-          const { computeCheckPassword } = await import('telegram/Password');
-          checkPassword = await computeCheckPassword(passwordConfig, password);
-        } catch (importError) {
-          console.error('Failed to import computeCheckPassword:', importError);
-          // If both fail, throw an error
-          throw new Error('Unable to compute password check - SRP implementation not available');
-        }
-      }
-      
-      // Use the computed parameters to check the password
-      await client.invoke(
-        new Api.auth.CheckPassword({
-          password: checkPassword
-        })
-      );
-      
-      localStorage.setItem('session', client.session.save() as string);
-      setIsLoggedIn(true);
-      setIsTwoFactorRequired(false);
-    } catch (error) {
-      console.error('Password verification error:', error);
-      throw error;
-    }
-  };
-
-  const logout = () => {
-    if (client) {
-      client.disconnect();
-    }
-    localStorage.removeItem('session');
-    setIsLoggedIn(false);
-    setIsTwoFactorRequired(false);
-    setPhone('');
-    setPhoneCodeHash('');
-  };
-
-  const fetchMessages = async () => {
-    if (!client) return [];
-    
-    try {
-      // Ensure client is connected before fetching messages
-      if (!client.connected) {
-        await client.connect();
-      }
-      
-      const result = await client.invoke(
-        new Api.messages.GetSavedHistory({
-          peer: 'self',
-          limit: 5,
-          offsetId: 0
-        })
-      );
-      
-      return result.messages || [];
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      return [];
-    }
-  };
-
-  const uploadFile = async (file: File, onProgress?: (progress: number) => void) => {
-    if (!client) {
-      throw new Error('Telegram client is not initialized. Please try logging in again.');
-    }
-    
-    if (!isLoggedIn) {
-      throw new Error('You must be logged in to upload files.');
-    }
-
-    try {
-      // Ensure client is connected before uploading
-      if (!client.connected) {
-        await client.connect();
+        if (!current.connected) await current.connect();
+        await current.invoke(new Api.auth.LogOut());
+      } catch {
+        // Clearing local state is still required if the server logout fails.
       }
 
-      // Verify we're still authenticated
       try {
-        await client.invoke(new Api.users.GetFullUser({
-          id: new Api.InputUserSelf()
-        }));
-      } catch (authError) {
-        console.error('Authentication verification failed:', authError);
-        setIsLoggedIn(false);
-        localStorage.removeItem('session');
-        throw new Error('Your session has expired. Please log in again.');
-      }
-
-      // Validate file size (2GB limit)
-      const maxSize = 2 * 1024 * 1024 * 1024; // 2GB in bytes
-      if (file.size > maxSize) {
-        throw new Error(`File size (${(file.size / (1024 * 1024 * 1024)).toFixed(2)}GB) exceeds the 2GB limit.`);
-      }
-
-      console.log(`Starting upload for file: ${file.name}, size: ${file.size} bytes`);
-
-      // Generate unique file ID
-      const fileId = Math.floor(Math.random() * 0x7fffffffffffffff);
-      
-      // Read file data
-      const fileBuffer = await new Promise<Buffer>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          try {
-            const arrayBuffer = event.target?.result as ArrayBuffer;
-            if (!arrayBuffer) {
-              reject(new Error('Failed to read file'));
-              return;
-            }
-            const buffer = Buffer.from(arrayBuffer);
-            resolve(buffer);
-          } catch (error) {
-            reject(new Error(`Buffer creation failed: ${error}`));
-          }
-        };
-        reader.onerror = () => reject(new Error('File reading failed'));
-        reader.readAsArrayBuffer(file);
-      });
-
-      // Use conservative chunk size to avoid protocol errors
-      const PART_SIZE = 512 * 1024; // 512KB chunks (safe and reliable)
-      const totalParts = Math.ceil(fileBuffer.length / PART_SIZE);
-      const isBigFile = file.size >= 10 * 1024 * 1024; // 10MB threshold
-
-      console.log(`File will be uploaded in ${totalParts} parts of ${PART_SIZE} bytes each. Big file: ${isBigFile}`);
-
-      // Upload parts sequentially with progress tracking
-      for (let partIndex = 0; partIndex < totalParts; partIndex++) {
-        const start = partIndex * PART_SIZE;
-        const end = Math.min(start + PART_SIZE, fileBuffer.length);
-        const partBytes = fileBuffer.slice(start, end);
-
-        try {
-          // Ensure client is connected
-          if (!client.connected) {
-            await client.connect();
-          }
-
-          if (isBigFile) {
-            await client.invoke(
-              new Api.upload.SaveBigFilePart({
-                fileId: fileId,
-                filePart: partIndex,
-                fileTotalParts: totalParts,
-                bytes: partBytes,
-              })
-            );
-          } else {
-            await client.invoke(
-              new Api.upload.SaveFilePart({
-                fileId: fileId,
-                filePart: partIndex,
-                bytes: partBytes,
-              })
-            );
-          }
-
-          // Update progress
-          const progress = Math.round(((partIndex + 1) / totalParts) * 100);
-          onProgress?.(progress);
-          console.log(`✅ Part ${partIndex + 1}/${totalParts} uploaded (${progress}%)`);
-
-        } catch (error: any) {
-          if (error.message && error.message.includes('FLOOD_WAIT')) {
-            const waitTime = parseInt(error.message.match(/\d+/)?.[0] || '5');
-            console.log(`⏳ Rate limited, waiting ${waitTime} seconds...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-            partIndex--; // Retry the same part
-            continue;
-          }
-          throw error;
-        }
-      }
-
-      console.log('All parts uploaded successfully. Creating InputFile...');
-
-      // Create InputFile based on upload method used
-      let inputFile;
-      if (isBigFile) {
-        inputFile = new Api.InputFileBig({
-          id: fileId,
-          parts: totalParts,
-          name: file.name,
-        });
-      } else {
-        inputFile = new Api.InputFile({
-          id: fileId,
-          parts: totalParts,
-          name: file.name,
-          md5Checksum: '',
-        });
-      }
-
-      console.log('Sending file to saved messages...');
-
-      // Send the file to saved messages
-      await client.invoke(
-        new Api.messages.SendMedia({
-          peer: 'self',
-          media: new Api.InputMediaUploadedDocument({
-            file: inputFile,
-            mimeType: file.type || 'application/octet-stream',
-            attributes: [
-              new Api.DocumentAttributeFilename({
-                fileName: file.name,
-              }),
-            ],
-          }),
-          message: `Uploaded file: ${file.name}`,
-          randomId: Math.floor(Math.random() * 0xffffffff),
-        })
-      );
-
-      console.log('File uploaded successfully to saved messages!');
-
-    } catch (error: any) {
-      let errorMessage = 'Failed to upload file. Please try again.';
-      
-      if (error.message) {
-        if (error.message.includes('session has expired') || 
-            error.message.includes('must be logged in') ||
-            error.message.includes('File size') ||
-            error.message.includes('client is not initialized') ||
-            error.message.includes('Failed to read file') ||
-            error.message.includes('Buffer creation failed') ||
-            error.message.includes('File reading failed')) {
-          errorMessage = error.message;
-        } else if (error.message.includes('FLOOD_WAIT')) {
-          errorMessage = 'Rate limit exceeded. Please wait a moment before uploading again.';
-        } else if (error.message.includes('FILE_PART_') && error.message.includes('_MISSING')) {
-          errorMessage = 'A file part was missing during upload. Please try again.';
-        } else if (error.message.includes('MD5_CHECKSUM_INVALID')) {
-          errorMessage = 'File checksum validation failed. The file may be corrupted.';
-        } else if (error.message.includes('AUTH_KEY_UNREGISTERED')) {
-          errorMessage = 'Your session has expired. Please log in again.';
-          setIsLoggedIn(false);
-          localStorage.removeItem('session');
-        } else if (error.message.includes('CONNECTION_NOT_INITED')) {
-          errorMessage = 'Connection lost. Please try again.';
-        } else if (error.message.includes('FILE_MIGRATE_')) {
-          errorMessage = 'File needs to be uploaded to a different server. Please try again.';
-        }
-      }
-
-      console.error('File upload error details:', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        message: error.message,
-        code: error.code,
-        type: error.constructor.name,
-        stack: error.stack
-      });
-
-      const uploadError = new Error(errorMessage);
-      uploadError.cause = error;
-      throw uploadError;
-    }
-  };
-
-  const uploadMultipleFiles = async (files: File[], onProgress?: (fileIndex: number, progress: number) => void) => {
-    console.log(`Starting upload of ${files.length} files...`);
-    
-    for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
-      const file = files[fileIndex];
-      console.log(`Uploading file ${fileIndex + 1}/${files.length}: ${file.name}`);
-      
-      try {
-        await uploadFile(file, (progress) => {
-          onProgress?.(fileIndex, progress);
-        });
-        console.log(`✅ File ${fileIndex + 1}/${files.length} uploaded successfully`);
-      } catch (error) {
-        console.error(`❌ Failed to upload file ${fileIndex + 1}/${files.length}: ${file.name}`, error);
-        throw error;
+        if (current.connected) await current.disconnect();
+      } catch {
+        // ignore
       }
     }
-    
-    console.log('All files uploaded successfully!');
-  };
 
-  const value = {
-    client,
-    isLoggedIn,
-    login,
-    sendCode,
-    sendPassword,
-    logout,
-    fetchMessages,
-    uploadFile,
-    uploadMultipleFiles,
-    isTwoFactorRequired
-  };
+    clearStoredSession();
+
+    const fresh = createClient('');
+    clientRef.current = fresh;
+    setClient(fresh);
+    setMe(null);
+    setStatus('loggedOut');
+  }, []);
 
   return (
-    <TelegramContext.Provider value={value}>
+    <TelegramContext.Provider
+      value={{ client, status, me, saveSession, completeLogin, logout }}
+    >
       {children}
     </TelegramContext.Provider>
   );

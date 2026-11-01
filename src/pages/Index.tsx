@@ -5,15 +5,15 @@ import { MadeWithDyad } from '@/components/made-with-dyad';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { isLoggedIn } = useTelegram();
+  const { status } = useTelegram();
 
   useEffect(() => {
-    if (isLoggedIn) {
+    if (status === 'loggedIn') {
       navigate('/home');
-    } else {
+    } else if (status === 'loggedOut') {
       navigate('/login');
     }
-  }, [isLoggedIn, navigate]);
+  }, [status, navigate]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100">
