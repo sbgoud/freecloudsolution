@@ -15,20 +15,34 @@ import type { Plugin } from "vite";
  * Point that import at GramJS's own browser crypto (WebCrypto based), which is
  * what GramJS's browser bundle uses and which returns the global Buffer.
  */
+const SERIALIZE_BYTES_CHECK = /if \(!\(data instanceof Buffer\)\) \{\s*if \(typeof data == "string"\) \{\s*data = Buffer\.from\(data\);\s*\}/;
+const SERIALIZE_BYTES_FIX =
+  'if (!(data instanceof Buffer)) { if (typeof data == "string") { data = Buffer.from(data); } else if (data instanceof Uint8Array || (data && ArrayBuffer.isView(data))) { data = Buffer.from(data.buffer ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : data); }';
+
+/** Source patches for GramJS so it behaves in the browser bundle. */
+function patchGramjsSource(id: string, code: string): string | null {
+  if (/[\\/]telegram[\\/]CryptoFile\.js$/.test(id)) {
+    const patched = code.replace(/require\(["']crypto["']\)/, 'require("./crypto/crypto")');
+    if (patched === code) throw new Error("gramjs patch: could not patch telegram/CryptoFile.js");
+    return patched;
+  }
+  if (/[\\/]telegram[\\/]tl[\\/]generationHelpers\.js$/.test(id)) {
+    // Accept any Uint8Array / Buffer copy (e.g. a Buffer from another
+    // polyfill instance) instead of throwing "Bytes or str expected".
+    const patched = code.replace(SERIALIZE_BYTES_CHECK, SERIALIZE_BYTES_FIX);
+    if (patched === code) throw new Error("gramjs patch: could not patch telegram/tl/generationHelpers.js");
+    return patched;
+  }
+  return null;
+}
+
 function gramjsBrowserCrypto(): Plugin {
   return {
     name: "gramjs-browser-crypto",
     enforce: "pre",
     transform(code, id) {
-      if (!/[\\/]telegram[\\/]CryptoFile\.js$/.test(id)) return null;
-      const patched = code.replace(
-        /require\(["']crypto["']\)/,
-        'require("./crypto/crypto")',
-      );
-      if (patched === code) {
-        throw new Error("gramjs-browser-crypto: could not patch telegram/CryptoFile.js");
-      }
-      return { code: patched, map: null };
+      const patched = patchGramjsSource(id, code);
+      return patched === null ? null : { code: patched, map: null };
     },
   };
 }
@@ -42,17 +56,19 @@ const gramjsBrowserCryptoEsbuild = {
       callback: (args: { path: string }) => Promise<{ contents: string; loader: "js" }>,
     ) => void;
   }) {
-    build.onLoad({ filter: /[\\/]telegram[\\/]CryptoFile\.js$/ }, async (args) => {
+    build.onLoad({ filter: /[\/]telegram[\/](CryptoFile|tl[\/]generationHelpers)\.js$/ }, async (args) => {
       const code = await fs.promises.readFile(args.path, "utf8");
-      return {
-        contents: code.replace(/require\(["']crypto["']\)/, 'require("./crypto/crypto")'),
-        loader: "js",
-      };
+      return { contents: patchGramjsSource(args.path, code) ?? code, loader: "js" };
     });
   },
 };
 
+const BUILD_ID = (process.env.VERCEL_GIT_COMMIT_SHA || "local").slice(0, 7);
+
 export default defineConfig(() => ({
+  define: {
+    __TG_DRIVE_BUILD__: JSON.stringify(BUILD_ID),
+  },
   optimizeDeps: {
     esbuildOptions: {
       plugins: [gramjsBrowserCryptoEsbuild],

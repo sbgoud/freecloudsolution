@@ -91,8 +91,18 @@ export async function signInWithPassword(
 
   const passwordConfig = await client.invoke(new Api.account.GetPassword());
   const check = await computeCheck(passwordConfig, password);
+  // Re-wrap the SRP proof with this bundle's Buffer so the TL serializer
+  // always accepts it, whatever Buffer copy the hashing code returned.
+  const srp =
+    check instanceof Api.InputCheckPasswordSRP
+      ? new Api.InputCheckPasswordSRP({
+          srpId: check.srpId,
+          A: Buffer.from(check.A),
+          M1: Buffer.from(check.M1),
+        })
+      : check;
   const result = await client.invoke(
-    new Api.auth.CheckPassword({ password: check })
+    new Api.auth.CheckPassword({ password: srp })
   );
 
   if (result instanceof Api.auth.Authorization) {
