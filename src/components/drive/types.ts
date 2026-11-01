@@ -1,3 +1,4 @@
+import type { Api } from 'telegram';
 import type { DriveFile } from '@/lib/telegram/files';
 
 export interface FolderEntry {
@@ -33,4 +34,8 @@ export interface UploadTask {
   status: UploadStatus;
   progress: number;
   error?: string;
+  splitId?: string;
+  uploadedParts?: { index: number; message: Api.Message }[];
+  partIndex?: number;
+  partCount?: number;
 }

@@ -20,6 +20,7 @@ interface ItemMenuProps {
   target: ItemTarget;
   onOpen?: () => void;
   onDownload?: () => void;
+  downloadDisabled?: boolean;
   onRename: () => void;
   onMove: () => void;
   onDelete: () => void;
@@ -29,6 +30,7 @@ export function ItemMenu({
   target,
   onOpen,
   onDownload,
+  downloadDisabled,
   onRename,
   onMove,
   onDelete,
@@ -59,7 +61,11 @@ export function ItemMenu({
           </DropdownMenuItem>
         ) : null}
         {target.type === 'file' && onDownload ? (
-          <DropdownMenuItem onSelect={onDownload}>
+          <DropdownMenuItem
+            onSelect={onDownload}
+            disabled={downloadDisabled}
+            title={downloadDisabled ? 'Incomplete file cannot be downloaded' : undefined}
+          >
             <Download className="mr-2 h-4 w-4" />
             Download
           </DropdownMenuItem>

@@ -1,4 +1,4 @@
-import { Folder } from 'lucide-react';
+import { AlertTriangle, Folder } from 'lucide-react';
 import type { TelegramClient } from 'telegram';
 import { Checkbox } from '@/components/ui/checkbox';
 import { humanSize, type DriveFile } from '@/lib/telegram/files';
@@ -91,6 +91,7 @@ export function FileGrid({
 
       {files.map((file) => {
         const selected = selectedIds.has(file.id);
+        const incomplete = Boolean(file.parts && file.complete === false);
         return (
           <div
             key={`file:${file.id}`}
@@ -139,11 +140,18 @@ export function FileGrid({
                 <ItemMenu
                   target={{ type: 'file', file }}
                   onDownload={() => onDownloadFile(file)}
+                  downloadDisabled={incomplete}
                   onRename={() => onRename({ type: 'file', file })}
                   onMove={() => onMove({ type: 'file', file })}
                   onDelete={() => onDelete({ type: 'file', file })}
                 />
               </div>
+              {incomplete ? (
+                <span className="absolute bottom-2 left-2 z-10 inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 backdrop-blur dark:text-amber-300">
+                  <AlertTriangle className="h-3 w-3" />
+                  Incomplete — {file.parts?.length ?? 0}/{file.partCount ?? '?'} parts
+                </span>
+              ) : null}
             </div>
             <div className="min-w-0 border-t bg-card px-3 py-2.5">
               <p className="truncate text-[13px] font-medium" title={file.name}>

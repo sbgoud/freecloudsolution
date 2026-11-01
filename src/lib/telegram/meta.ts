@@ -1,12 +1,40 @@
 export type CaptionType = 'file' | 'folder';
 
+export interface SplitMeta {
+  id: string;
+  i: number;
+  n: number;
+  size: number;
+  name: string;
+  mime: string;
+}
+
 export interface CaptionMeta {
   type: CaptionType;
   path: string;
+  split?: SplitMeta;
 }
 
 const CAPTION_HEADER = '#tgdrive';
 const MAX_CAPTION_LENGTH = 1024;
+const SPLIT_ID_ALPHABET =
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+export function createSplitId(): string {
+  const bytes = new Uint8Array(12);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  let id = '';
+  for (const byte of bytes) {
+    id += SPLIT_ID_ALPHABET[byte % SPLIT_ID_ALPHABET.length];
+  }
+  return id;
+}
 
 export function normalizePath(input: string): string {
   if (!input) return '/';
@@ -55,9 +83,39 @@ function ensureCaptionLength(caption: string, path: string): string {
   return caption;
 }
 
-export function buildFileCaption(path: string): string {
+export function buildFileCaption(path: string, split?: SplitMeta): string {
   const normalized = normalizePath(path);
-  const caption = `${CAPTION_HEADER}\n${JSON.stringify({ v: 1, path: normalized })}`;
+  const sanitizedSplit = split
+    ? {
+        id: split.id,
+        i: split.i,
+        n: split.n,
+        size: split.size,
+        name: split.name,
+        mime: (split.mime || 'application/octet-stream').slice(0, 128),
+      }
+    : undefined;
+
+  const makeCaption = (name: string): string =>
+    `${CAPTION_HEADER}\n${JSON.stringify(
+      sanitizedSplit
+        ? { v: 1, path: normalized, split: { ...sanitizedSplit, name } }
+        : { v: 1, path: normalized }
+    )}`;
+
+  if (!sanitizedSplit) {
+    return ensureCaptionLength(makeCaption(''), normalized);
+  }
+
+  let name = sanitizedSplit.name || basename(normalized);
+  let caption = makeCaption(name);
+
+  while (caption.length > MAX_CAPTION_LENGTH && name.length > 0) {
+    const excess = caption.length - MAX_CAPTION_LENGTH;
+    name = name.slice(0, Math.max(0, name.length - excess - 1));
+    caption = makeCaption(name);
+  }
+
   return ensureCaptionLength(caption, normalized);
 }
 
@@ -69,6 +127,34 @@ export function buildFolderCaption(path: string): string {
     path: normalized,
   })}`;
   return ensureCaptionLength(caption, normalized);
+}
+
+function parseSplitMeta(value: unknown): SplitMeta | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== 'string' || !record.id) return undefined;
+  if (!Number.isInteger(record.i) || Number(record.i) < 0) return undefined;
+  if (!Number.isInteger(record.n) || Number(record.n) < 1) return undefined;
+  if (!Number.isFinite(Number(record.size)) || Number(record.size) < 0) {
+    return undefined;
+  }
+
+  const index = Number(record.i);
+  const count = Number(record.n);
+  if (index >= count) return undefined;
+
+  return {
+    id: record.id,
+    i: index,
+    n: count,
+    size: Number(record.size),
+    name: typeof record.name === 'string' ? record.name : '',
+    mime:
+      typeof record.mime === 'string'
+        ? record.mime
+        : 'application/octet-stream',
+  };
 }
 
 function parseJsonLine(line: string): CaptionMeta | null {
@@ -91,9 +177,11 @@ function parseJsonLine(line: string): CaptionMeta | null {
     return null;
   }
 
+  const split = parseSplitMeta(record.split);
   return {
     type: record.type === 'folder' ? 'folder' : 'file',
     path: normalizePath(record.path),
+    ...(split ? { split } : {}),
   };
 }
 

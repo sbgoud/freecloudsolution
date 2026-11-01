@@ -16,6 +16,7 @@ interface UploadPanelProps {
   tasks: UploadTask[];
   onCancel: () => void;
   onClose: () => void;
+  onRetry: (id: number) => void;
 }
 
 function statusLabel(task: UploadTask): string {
@@ -35,7 +36,12 @@ function statusLabel(task: UploadTask): string {
   }
 }
 
-export function UploadPanel({ tasks, onCancel, onClose }: UploadPanelProps) {
+export function UploadPanel({
+  tasks,
+  onCancel,
+  onClose,
+  onRetry,
+}: UploadPanelProps) {
   if (tasks.length === 0) return null;
 
   const total = tasks.length;
@@ -151,10 +157,27 @@ export function UploadPanel({ tasks, onCancel, onClose }: UploadPanelProps) {
               {task.status === 'uploading' ? (
                 <Progress value={task.progress * 100} className="mt-1.5 h-1" />
               ) : null}
-              {task.status === 'error' && task.error ? (
-                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-destructive">
-                  {task.error}
+              {task.status === 'uploading' &&
+              task.partCount &&
+              task.partCount > 1 ? (
+                <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+                  Part {(task.partIndex ?? 0) + 1} of {task.partCount}
                 </p>
+              ) : null}
+              {task.status === 'error' && task.error ? (
+                <div className="mt-1 flex items-start gap-2">
+                  <p className="line-clamp-2 flex-1 text-[11px] leading-relaxed text-destructive">
+                    {task.error}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 shrink-0 px-2 text-[11px]"
+                    onClick={() => onRetry(task.id)}
+                  >
+                    Retry
+                  </Button>
+                </div>
               ) : null}
             </div>
           </div>

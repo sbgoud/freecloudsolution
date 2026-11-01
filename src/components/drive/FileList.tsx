@@ -1,4 +1,4 @@
-import { Folder } from 'lucide-react';
+import { AlertTriangle, Folder } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
@@ -129,6 +129,7 @@ export function FileList({
 
           {files.map((file) => {
             const selected = selectedIds.has(file.id);
+            const incomplete = Boolean(file.parts && file.complete === false);
             return (
               <TableRow
                 key={`file:${file.id}`}
@@ -167,6 +168,12 @@ export function FileList({
                           {file.folder || '/'}
                         </p>
                       ) : null}
+                      {incomplete ? (
+                        <span className="mt-0.5 inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                          <AlertTriangle className="h-3 w-3" />
+                          Incomplete — {file.parts?.length ?? 0}/{file.partCount ?? '?'} parts
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </TableCell>
@@ -180,6 +187,7 @@ export function FileList({
                   <ItemMenu
                     target={{ type: 'file', file }}
                     onDownload={() => onDownloadFile(file)}
+                    downloadDisabled={incomplete}
                     onRename={() => onRename({ type: 'file', file })}
                     onMove={() => onMove({ type: 'file', file })}
                     onDelete={() => onDelete({ type: 'file', file })}

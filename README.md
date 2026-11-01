@@ -24,9 +24,16 @@ for keyboard and mobile use.
   - Drag and drop or pick individual files
   - Upload whole folders, preserving their nested structure
   - Files up to **2 GB** on a free Telegram account and **4 GB** with Premium
-  - Queued uploads with per-file progress and cancellation
-- **Downloads** — download a single file or multiple selected files
-- **File management** — rename, move and delete files and folders
+  - Files larger than **1.5 GiB** are split into parts automatically, so the
+    overall file size is not limited by Telegram's per-file limit
+  - Queued uploads with byte-weighted progress, part progress, cancellation and
+    automatic retries for failed parts
+- **Downloads** — stream files straight to disk with progress and cancellation
+  - File System Access API where available (Chrome, Edge, desktop)
+  - Service-worker streaming fallback for other browsers
+  - In-memory Blob fallback only for smaller files
+- **File management** — rename, move and delete files and folders; operations
+  on split files apply to every part
 - **New folder** — create folders at the current location
 - **Unsorted** — media in Saved Messages without TG Drive metadata appears in
   an automatically generated `/Unsorted` folder so nothing is hidden
@@ -55,6 +62,43 @@ Telegram message:
 
 Renaming or moving an item simply updates the `path` in its caption. The
 current path is the source of truth for folder structure.
+
+## Large files and split parts
+
+Telegram limits each uploaded document to 2 GB (4 GB with Premium). TG Drive
+splits any file larger than **1.5 GiB** (1.5 × 1024³ bytes) into sequential
+parts and uploads each part as a separate document in Saved Messages. A file
+that is 1.5 GiB or smaller uses the normal single-document path exactly as
+before.
+
+Every part keeps its own caption with a `split` object:
+
+```text
+#tgdrive
+{"v":1,"path":"/Videos/big.mkv","split":{"id":"a1b2c3d4e5f6","i":0,"n":3,"size":4831838208,"name":"big.mkv","mime":"video/x-matroska"}}
+```
+
+`i` is the zero-based part index, `n` is the total number of parts and `size`
+is the original file size. Parts share the same random `id`, so the drive lists
+them as a single logical file with its full name, MIME type, size and latest
+date. Old captions (including the legacy `#tgdrive path=…` form) are still
+accepted.
+
+If some parts are missing, the file is shown with an **Incomplete** badge and
+cannot be downloaded, but it can still be renamed, moved or deleted. Deleting
+or updating a split file applies to every part message.
+
+Downloads are streamed rather than buffered in memory:
+
+- **File System Access API** (`showSaveFilePicker` + `createWritable`) is used
+  when the browser supports it. Parts are downloaded sequentially and written
+  to disk chunk by chunk.
+- Otherwise a **service worker** (`public/download-sw.js`, mounted at scope
+  `/`) serves a `ReadableStream` on `/__tgdrive_dl/<id>` and receives chunks
+  from the page over a `MessageChannel`. The response is an attachment with the
+  correct filename and content length.
+- If neither streaming method is available, a Blob is used only for files
+  smaller than 500 MB.
 
 ## Privacy
 

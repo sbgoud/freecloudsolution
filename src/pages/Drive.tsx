@@ -30,17 +30,27 @@ import {
   createFolder,
   deleteFolder,
   deleteItems,
-  downloadFile,
+  downloadDriveFile,
+  fileMessageIds,
+  humanSize,
   listAll,
   messageToDriveFile,
   moveFolder,
+  PART_SIZE,
   renameOrMove,
   triggerBrowserDownload,
   uploadFiles,
   type DriveFile,
   type DriveFolderMarker,
+  type UploadedPart,
 } from '@/lib/telegram/files';
-import { basename, dirname, joinPath, normalizePath } from '@/lib/telegram/meta';
+import {
+  basename,
+  createSplitId,
+  dirname,
+  joinPath,
+  normalizePath,
+} from '@/lib/telegram/meta';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -152,6 +162,7 @@ const Drive = () => {
   const uploadAbortRef = useRef<AbortController | null>(null);
   const processingRef = useRef(false);
   const uploadIdRef = useRef(0);
+  const downloadAbortRef = useRef<AbortController | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -312,24 +323,63 @@ const Drive = () => {
 
   const download = async (file: DriveFile) => {
     if (!client) return;
-    const toastId = toast.loading(`Downloading “${file.name}”…`);
+    if (file.parts && file.complete === false) {
+      toast.error(
+        `“${file.name}” is incomplete (${file.parts.length}/${file.partCount ?? '?'} parts) and cannot be downloaded.`
+      );
+      return;
+    }
+
+    const controller = new AbortController();
+    downloadAbortRef.current = controller;
+    const cancelAction = {
+      label: 'Cancel',
+      onClick: () => controller.abort(),
+    };
+    const toastId = toast.loading(`Downloading “${file.name}”…`, {
+      action: cancelAction,
+    });
+
     try {
-      const blob = await downloadFile(client, file, (fraction) => {
-        toast.loading(
-          `Downloading “${file.name}”… ${Math.round(fraction * 100)}%`,
-          { id: toastId }
-        );
+      let lastPercent = -1;
+      const outcome = await downloadDriveFile(client, file, {
+        signal: controller.signal,
+        onProgress: (loaded, total) => {
+          const percent = total > 0 ? Math.round((loaded / total) * 100) : 0;
+          if (percent === lastPercent) return;
+          lastPercent = percent;
+          toast.loading(
+            `Downloading “${file.name}”… ${percent}% (${humanSize(loaded)} of ${humanSize(total)})`,
+            { id: toastId, action: cancelAction }
+          );
+        },
       });
-      triggerBrowserDownload(blob, file.name);
+
+      if (outcome.method === 'blob' && outcome.blob) {
+        triggerBrowserDownload(outcome.blob, file.name);
+      }
       toast.success(`Downloaded “${file.name}”`, { id: toastId });
     } catch (downloadError) {
-      toast.error(errorMessage(downloadError, 'Download failed.'), {
-        id: toastId,
-      });
+      const message = errorMessage(downloadError, 'Download failed.');
+      if (/cancelled/i.test(message)) {
+        toast.info('Download cancelled', { id: toastId });
+      } else {
+        toast.error(message, { id: toastId });
+      }
+    } finally {
+      if (downloadAbortRef.current === controller) {
+        downloadAbortRef.current = null;
+      }
     }
   };
 
   const openFile = (file: DriveFile) => {
+    if (file.parts && file.complete === false) {
+      toast.error(
+        `“${file.name}” is incomplete (${file.parts.length}/${file.partCount ?? '?'} parts).`
+      );
+      return;
+    }
     if (file.kind === 'image') {
       setPreviewFile(file);
       return;
@@ -342,7 +392,8 @@ const Drive = () => {
     newPath: string,
     message?: Awaited<ReturnType<typeof renameOrMove>>
   ) => {
-    const updated = message ? messageToDriveFile(message, newPath) : null;
+    const updated =
+      message && !file.parts?.length ? messageToDriveFile(message, newPath) : null;
     setFiles((previous) =>
       previous.map((item) => {
         if (item.id !== file.id) return item;
@@ -449,7 +500,7 @@ const Drive = () => {
 
     if (deleteTarget.type === 'file') {
       const file = deleteTarget.file;
-      await deleteItems(client, [file.id]);
+      await deleteItems(client, fileMessageIds(file));
       setFiles((previous) => previous.filter((item) => item.id !== file.id));
       setSelectedIds((previous) => {
         const next = new Set(previous);
@@ -471,10 +522,7 @@ const Drive = () => {
   const handleBulkDelete = async () => {
     if (!client || selectedFiles.length === 0) return;
     const count = selectedFiles.length;
-    await deleteItems(
-      client,
-      selectedFiles.map((file) => file.id)
-    );
+    await deleteItems(client, selectedFiles.flatMap(fileMessageIds));
     const ids = new Set(selectedFiles.map((file) => file.id));
     setFiles((previous) => previous.filter((file) => !ids.has(file.id)));
     setSelectedIds(new Set());
@@ -510,8 +558,10 @@ const Drive = () => {
         { id: toastId }
       );
       try {
-        const blob = await downloadFile(client, file);
-        triggerBrowserDownload(blob, file.name);
+        const outcome = await downloadDriveFile(client, file);
+        if (outcome.method === 'blob' && outcome.blob) {
+          triggerBrowserDownload(outcome.blob, file.name);
+        }
       } catch {
         failed += 1;
       }
@@ -545,27 +595,60 @@ const Drive = () => {
       while (uploadQueueRef.current.length > 0) {
         if (controller.signal.aborted) break;
         const task = uploadQueueRef.current[0];
+        const splitId =
+          task.splitId ??
+          (task.file.size > PART_SIZE ? createSplitId() : undefined);
+        const expectedParts =
+          task.file.size > PART_SIZE
+            ? Math.ceil(task.file.size / PART_SIZE)
+            : undefined;
 
-        updateTask(task.id, { status: 'uploading', progress: 0, error: undefined });
+        updateTask(task.id, {
+          status: 'uploading',
+          progress: task.progress ?? 0,
+          error: undefined,
+          splitId,
+          partIndex: undefined,
+          partCount: expectedParts,
+        });
 
         try {
-          const messages = await uploadFiles(
+          const results = await uploadFiles(
             client,
-            [{ file: task.file, path: task.path }],
+            [
+              {
+                file: task.file,
+                path: task.path,
+                splitId,
+                uploadedParts: task.uploadedParts,
+              },
+            ],
             {
               signal: controller.signal,
-              onFileProgress: (_index, fraction) => {
+              onFileProgress: (_index, fraction, part) => {
                 updateTask(task.id, {
                   progress: Math.max(0, Math.min(1, fraction)),
+                  partIndex: part?.index,
+                  partCount: part?.count ?? expectedParts,
                 });
+              },
+              onPartUploaded: (index, message) => {
+                setUploads((previous) =>
+                  previous.map((item) => {
+                    if (item.id !== task.id) return item;
+                    const existing = item.uploadedParts ?? [];
+                    const next: UploadedPart[] = [
+                      ...existing.filter((part) => part.index !== index),
+                      { index, message },
+                    ].sort((a, b) => a.index - b.index);
+                    return { ...item, splitId, uploadedParts: next };
+                  })
+                );
               },
             }
           );
 
-          const message = messages[0];
-          const newFile = message
-            ? messageToDriveFile(message, task.path)
-            : null;
+          const newFile = results[0]?.file;
           if (newFile) {
             setFiles((previous) =>
               previous.some((file) => file.id === newFile.id)
@@ -573,7 +656,11 @@ const Drive = () => {
                 : [...previous, newFile]
             );
           }
-          updateTask(task.id, { status: 'done', progress: 1 });
+          updateTask(task.id, {
+            status: 'done',
+            progress: 1,
+            partIndex: undefined,
+          });
         } catch (uploadError) {
           if (controller.signal.aborted) {
             updateTask(task.id, { status: 'cancelled', error: undefined });
@@ -602,6 +689,20 @@ const Drive = () => {
         void processUploads();
       }
     }
+  };
+
+  const retryUpload = (id: number) => {
+    const task = uploads.find((item) => item.id === id);
+    if (!task || task.status !== 'error') return;
+
+    const queued: UploadTask = {
+      ...task,
+      status: 'queued',
+      error: undefined,
+    };
+    updateTask(id, { status: 'queued', error: undefined });
+    uploadQueueRef.current.push(queued);
+    void processUploads();
   };
 
   const enqueueUploads = (fileList: FileList | File[] | null) => {
@@ -1182,6 +1283,7 @@ const Drive = () => {
         tasks={uploads}
         onCancel={cancelUploads}
         onClose={closeUploadPanel}
+        onRetry={retryUpload}
       />
     </div>
   );
